@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Network Request Analyzer",
+  "version": "1.0",
+  "description": "An extension to analyze network requests from a given URL.",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "debugger",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "action": {
+    "default_title": "Open Network Request Analyzer"
+  },
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
+}

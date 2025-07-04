@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Network Request Analyzer</title>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f8f9fa;
+      line-height: 1.6;
+    }
+    
+    h1 {
+      color: #2c3e50;
+      margin-bottom: 20px;
+      font-size: 28px;
+      text-align: center;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 8px;
+      padding: 30px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    
+    .input-group {
+      margin-bottom: 20px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #34495e;
+      font-size: 14px;
+    }
+    
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      box-sizing: border-box;
+      transition: border-color 0.2s;
+    }
+    
+    input[type="text"]:focus, input[type="password"]:focus {
+      outline: none;
+      border-color: #3498db;
+      box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+    }
+    
+    .api-key-input.highlight-required {
+      border: 3px solid #e74c3c !important;
+      background-color: #ffeee8;
+      animation: pulse-red 2s infinite;
+    }
+    
+    @keyframes pulse-red {
+      0% { box-shadow: 0 0 5px rgba(231, 76, 60, 0.3); }
+      50% { box-shadow: 0 0 15px rgba(231, 76, 60, 0.6); }
+      100% { box-shadow: 0 0 5px rgba(231, 76, 60, 0.3); }
+    }
+    
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      width: 100%;
+      margin-top: 10px;
+      transition: all 0.2s;
+    }
+    
+    button:hover:not(:disabled) {
+      background-color: #2980b9;
+      transform: translateY(-1px);
+    }
+    
+    button:disabled {
+      background-color: #95a5a6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    #results {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      border: 2px solid #ddd;
+      border-radius: 6px;
+      padding: 20px;
+      min-height: 300px;
+      max-height: 600px;
+      overflow-y: auto;
+      background-color: #f8f9fa;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    
+    .highlight {
+      background-color: #fff3cd;
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-weight: bold;
+    }
+    
+    .instructions {
+      background-color: #e8f4fd;
+      border: 1px solid #bee5eb;
+      border-radius: 6px;
+      padding: 15px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      color: #0c5460;
+    }
+    
+    .results-container {
+      background: white;
+      border-radius: 8px;
+      padding: 30px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    h2 {
+      color: #2c3e50;
+      margin-top: 0;
+      margin-bottom: 20px;
+      font-size: 22px;
+    }
+    
+    .status {
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      font-weight: 500;
+    }
+    
+    .status.success {
+      background-color: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+    }
+    
+    .status.warning {
+      background-color: #fff3cd;
+      border: 1px solid #ffeaa7;
+      color: #856404;
+    }
+    
+    .status.error {
+      background-color: #f8d7da;
+      border: 1px solid #f5c6cb;
+      color: #721c24;
+    }
+  </style>
+</head>
+<body>
+  <h1>🌐 Network Request Analyzer</h1>
+  
+  <div class="container">
+    <div class="instructions">
+      <strong>How to use:</strong> Ask what you're looking for (e.g., "my Instagram username", "my Youtube subscription tier"), optionally specify a website, then click "Analyze with AI". The extension will capture network traffic and use AI to find exactly what you need.
+    </div>
+    
+    <!-- Gemini API Key Section -->
+    <div class="input-group">
+      <label for="apiKey">Gemini API Key:</label>
+      <input type="password" id="apiKey" placeholder="Enter your Gemini API key (saved locally)" class="api-key-input">
+      <div style="font-size: 12px; color: #666; margin-top: 5px;">
+        Your API key is stored locally in your browser and never sent to our servers. 
+        <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: #3498db;">Get your API key</a>
+      </div>
+    </div>
+
+    <!-- Main AI Query Section -->
+    <div class="input-group">
+      <label for="aiQuery">What are you looking for?</label>
+      <input type="text" id="aiQuery" placeholder="e.g., 'my YouTube username', 'my Instagram profile picture', 'QR code to login'">
+      <div style="font-size: 12px; color: #666; margin-top: 5px;">
+        Ask natural language questions. AI will find the relevant network requests and extract the information you need.
+      </div>
+      <div id="queryValidation" style="font-size: 13px; color: #e74c3c; margin-top: 8px; display: none;">
+        Please specify a service (e.g., "WhatsApp QR code" instead of just "QR code") or provide a URL below
+      </div>
+    </div>
+
+    <!-- Optional Website URL -->
+    <div class="input-group">
+      <label for="url">Website URL (optional):</label>
+      <input type="text" id="url" placeholder="e.g., youtube.com, instagram.com - leave blank to let AI suggest">
+      <div style="font-size: 12px; color: #666; margin-top: 5px;">
+        If you don't specify a URL, AI can suggest the best website to visit based on your query.
+      </div>
+    </div>
+    
+    <button id="search">🤖 Analyze with AI</button>
+  </div>
+  
+  <div class="results-container">
+    <h2>All Requests including Headers, Payloads, and Responses</h2>
+    <div id="results">Click "Analyze Network Requests" to start capturing network traffic...</div>
+  </div>
+  
+  <script type="module" src="options.js"></script>
+</body>
+</html> 
