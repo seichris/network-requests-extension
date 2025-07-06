@@ -173,13 +173,48 @@
       <strong>How to use:</strong> Ask what you're looking for (e.g., "my Instagram username", "my Youtube subscription tier"), optionally specify a website, then click "Analyze with AI". The extension will capture network traffic and use AI to find exactly what you need.
     </div>
     
-    <!-- Gemini API Key Section -->
+    <!-- AI Provider Selector -->
     <div class="input-group">
+      <label for="aiProvider">AI Provider:</label>
+      <select id="aiProvider">
+        <option value="gemini">Gemini</option>
+        <option value="openai">OpenAI (ChatGPT)</option>
+      </select>
+      <div style="font-size: 12px; color: #666; margin-top: 5px;">
+        Choose which AI model to use for network analysis. You will need an API key for the selected provider.
+      </div>
+    </div>
+
+    <!-- OpenAI Model Selector (hidden by default) -->
+    <div class="input-group" id="openaiModelGroup" style="display: none;">
+      <label for="openaiModel">OpenAI Model:</label>
+      <select id="openaiModel">
+        <option value="gpt-4o">GPT-4o (default)</option>
+        <option value="gpt-4">GPT-4</option>
+        <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+      </select>
+      <div style="font-size: 12px; color: #666; margin-top: 5px;">
+        Select which OpenAI model to use for analysis.
+      </div>
+    </div>
+
+    <!-- Gemini API Key Section -->
+    <div class="input-group" id="geminiApiKeyGroup">
       <label for="apiKey">Gemini API Key:</label>
       <input type="password" id="apiKey" placeholder="Enter your Gemini API key (saved locally)" class="api-key-input">
       <div style="font-size: 12px; color: #666; margin-top: 5px;">
         Your API key is stored locally in your browser and never sent to our servers. 
         <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: #3498db;">Get your API key</a>
+      </div>
+    </div>
+
+    <!-- OpenAI API Key Section (hidden by default) -->
+    <div class="input-group" id="openaiApiKeyGroup" style="display: none;">
+      <label for="openaiApiKey">OpenAI API Key:</label>
+      <input type="password" id="openaiApiKey" placeholder="Enter your OpenAI API key (saved locally)" class="api-key-input">
+      <div style="font-size: 12px; color: #666; margin-top: 5px;">
+        Your API key is stored locally in your browser and never sent to our servers. 
+        <a href="https://platform.openai.com/account/api-keys" target="_blank" style="color: #3498db;">Get your API key</a>
       </div>
     </div>
 

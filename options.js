@@ -1,4 +1,4 @@
-import { API_CONFIG, STORAGE_KEYS, NETWORK_CONFIG, AI_PROMPTS } from './config.js';
+import { API_CONFIG, STORAGE_KEYS, NETWORK_CONFIG, AI_PROMPTS, AI_PROVIDERS } from './config.js';
 
 // Using Gemini REST API directly (no external SDK needed)
 
@@ -11,13 +11,24 @@ document.addEventListener('DOMContentLoaded', function() {
     const resultsDiv = document.getElementById('results');
     const apiKeyInput = document.getElementById('apiKey');
     const aiQueryInput = document.getElementById('aiQuery');
+    const aiProviderSelect = document.getElementById('aiProvider');
+    const geminiApiKeyGroup = document.getElementById('geminiApiKeyGroup');
+    const openaiApiKeyGroup = document.getElementById('openaiApiKeyGroup');
+    const claudeApiKeyGroup = document.getElementById('claudeApiKeyGroup');
+    const openaiModelGroup = document.getElementById('openaiModelGroup');
+    const openaiModelSelect = document.getElementById('openaiModel');
     
     // Debug: Check if all elements are found
     console.log('Elements found:', {
         urlInput: !!urlInput,
         searchButton: !!searchButton,
         apiKeyInput: !!apiKeyInput,
-        aiQueryInput: !!aiQueryInput
+        aiQueryInput: !!aiQueryInput,
+        aiProviderSelect: !!aiProviderSelect,
+        geminiApiKeyGroup: !!geminiApiKeyGroup,
+        openaiApiKeyGroup: !!openaiApiKeyGroup,
+        openaiModelGroup: !!openaiModelGroup,
+        openaiModelSelect: !!openaiModelSelect
     });
 
     // Add event listeners for Enter key
@@ -483,9 +494,164 @@ ${'='.repeat(80)}
         }
     };
 
+    // --- Multi-AI Support ---
+    // Save/load API keys for each provider
+    function saveProviderApiKey(provider, apiKey) {
+        localStorage.setItem(`ai_api_key_${provider}`, apiKey);
+    }
+    function loadProviderApiKey(provider) {
+        return localStorage.getItem(`ai_api_key_${provider}`) || '';
+    }
+
+    // Store/load OpenAI model selection
+    function saveOpenAIModel(model) {
+        localStorage.setItem('openai_model', model);
+    }
+    function loadOpenAIModel() {
+        return localStorage.getItem('openai_model') || 'gpt-4o';
+    }
+
+    // Unified analyzeWithAI function
+    async function analyzeWithAI(provider, apiKey, networkData, query) {
+        if (!apiKey) throw new Error(`Missing API key for ${AI_PROVIDERS[provider].name}`);
+        switch (provider) {
+            case 'gemini':
+                return await analyzeWithGemini(apiKey, networkData, query);
+            case 'openai':
+                return await analyzeWithOpenAI(apiKey, networkData, query);
+            case 'claude':
+                return await analyzeWithClaude(apiKey, networkData, query);
+            default:
+                throw new Error('Unknown AI provider');
+        }
+    }
+
+    // Handler for Gemini (existing logic)
+    async function analyzeWithGemini(apiKey, networkData, query) {
+        return await makeGeminiRequest(apiKey, networkData, query);
+    }
+    // Handler for OpenAI (full implementation)
+    async function analyzeWithOpenAI(apiKey, networkData, query) {
+        const model = openaiModelSelect.value || 'gpt-4o';
+        // Prepare prompt (same as Gemini)
+        const keywords = await generateSearchKeywords(apiKey, query); // Optionally reuse Gemini's logic
+        const relevantData = searchNetworkData(networkData, keywords);
+        if (relevantData.length === 0) {
+            return `No relevant network requests found for query: "${query}"
+\nTried searching for keywords: ${keywords.join(', ')}\n\nSuggestions:\n- Try a different search query\n- Check if the website actually makes requests related to your query\n- Look at the raw network data to see what information is available`;
+        }
+        const focusedData = relevantData.slice(0, NETWORK_CONFIG.MAX_RELEVANT_REQUESTS);
+        const dataString = JSON.stringify(focusedData, null, 2);
+        const estimatedTokens = estimateTokens(dataString);
+        const finalData = estimatedTokens > NETWORK_CONFIG.MAX_TOKENS ? truncateToTokens(dataString, NETWORK_CONFIG.MAX_TOKENS) : dataString;
+        const prompt = AI_PROMPTS.ANALYZE_REQUESTS(query, keywords, finalData, focusedData, networkData);
+        // OpenAI API call
+        const apiUrl = 'https://api.openai.com/v1/chat/completions';
+        const requestBody = {
+            model: model,
+            messages: [
+                { role: 'system', content: 'You are a helpful assistant that analyzes network request data.' },
+                { role: 'user', content: prompt }
+            ],
+            max_tokens: 1024,
+            temperature: 0.2
+        };
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify(requestBody)
+        });
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(`OpenAI API error: ${response.status} ${response.statusText}\n${err}`);
+        }
+        const data = await response.json();
+        if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
+            return data.choices[0].message.content.trim();
+        }
+        throw new Error('No response from OpenAI');
+    }
+    // Handler for Claude (full implementation)
+    async function analyzeWithClaude(apiKey, networkData, query) {
+        // Prepare prompt (same as Gemini)
+        const keywords = await generateSearchKeywords(apiKey, query); // Optionally reuse Gemini's logic
+        const relevantData = searchNetworkData(networkData, keywords);
+        if (relevantData.length === 0) {
+            return `No relevant network requests found for query: "${query}"
+\nTried searching for keywords: ${keywords.join(', ')}\n\nSuggestions:\n- Try a different search query\n- Check if the website actually makes requests related to your query\n- Look at the raw network data to see what information is available`;
+        }
+        const focusedData = relevantData.slice(0, NETWORK_CONFIG.MAX_RELEVANT_REQUESTS);
+        const dataString = JSON.stringify(focusedData, null, 2);
+        const estimatedTokens = estimateTokens(dataString);
+        const finalData = estimatedTokens > NETWORK_CONFIG.MAX_TOKENS ? truncateToTokens(dataString, NETWORK_CONFIG.MAX_TOKENS) : dataString;
+        const prompt = AI_PROMPTS.ANALYZE_REQUESTS(query, keywords, finalData, focusedData, networkData);
+        // Claude API call
+        const apiUrl = 'https://api.anthropic.com/v1/messages';
+        const requestBody = {
+            model: 'claude-3-opus-20240229',
+            max_tokens: 1024,
+            temperature: 0.2,
+            messages: [
+                { role: 'user', content: prompt }
+            ]
+        };
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify(requestBody)
+        });
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(`Claude API error: ${response.status} ${response.statusText}\n${err}`);
+        }
+        const data = await response.json();
+        if (data.content && Array.isArray(data.content) && data.content[0] && data.content[0].text) {
+            return data.content[0].text.trim();
+        }
+        throw new Error('No response from Claude');
+    }
+
+    // --- Update API key input logic ---
+    // On provider change, load saved API key for that provider
+    aiProviderSelect.addEventListener('change', () => {
+        updateApiKeyVisibility();
+        const provider = aiProviderSelect.value;
+        let input;
+        if (provider === 'gemini') input = apiKeyInput;
+        if (provider === 'openai') input = document.getElementById('openaiApiKey');
+        if (provider === 'claude') input = document.getElementById('claudeApiKey');
+        if (input) input.value = loadProviderApiKey(provider);
+    });
+    // On API key input, save for the selected provider
+    [apiKeyInput, document.getElementById('openaiApiKey'), document.getElementById('claudeApiKey')].forEach((input, idx) => {
+        if (!input) return;
+        input.addEventListener('input', (e) => {
+            const provider = ['gemini', 'openai', 'claude'][idx];
+            saveProviderApiKey(provider, e.target.value.trim());
+        });
+        input.addEventListener('blur', (e) => {
+            const provider = ['gemini', 'openai', 'claude'][idx];
+            saveProviderApiKey(provider, e.target.value.trim());
+        });
+    });
+    // On page load, set API key input to saved value for default provider
+    aiProviderSelect.dispatchEvent(new Event('change'));
+
+    // --- Main analysis flow update ---
     searchButton.addEventListener('click', async () => {
         let url = urlInput.value.trim();
-        const apiKey = apiKeyInput.value.trim();
+        const provider = aiProviderSelect.value;
+        let apiKey = '';
+        if (provider === 'gemini') apiKey = apiKeyInput.value.trim();
+        if (provider === 'openai') apiKey = document.getElementById('openaiApiKey').value.trim();
+        if (provider === 'claude') apiKey = document.getElementById('claudeApiKey').value.trim();
         const aiQuery = aiQueryInput.value.trim();
         
         console.log('AI Search button clicked', { url, hasApiKey: !!apiKey, aiQuery });
@@ -494,7 +660,7 @@ ${'='.repeat(80)}
         if (!apiKey) {
             checkApiKeyHighlight();
             resultsDiv.innerHTML = '';
-            resultsDiv.appendChild(createStatusMessage('error', '❌ Please enter your Gemini API key first.'));
+            resultsDiv.appendChild(createStatusMessage('error', `❌ Please enter your ${AI_PROVIDERS[provider].apiKeyLabel}.`));
             return;
         }
         
@@ -505,7 +671,7 @@ ${'='.repeat(80)}
         }
         
         // Save API key for future use
-        saveApiKey(apiKey);
+        saveProviderApiKey(provider, apiKey);
         checkApiKeyHighlight(); // Remove highlight if key is valid
 
         // If no URL provided, try to suggest one
@@ -601,7 +767,7 @@ ${'='.repeat(80)}
                     
                     updateAnalysisStatus(statusMessage);
                     
-                    const aiResult = await makeGeminiRequest(apiKey, response.data, aiQuery);
+                    const aiResult = await analyzeWithAI(provider, apiKey, response.data, aiQuery);
                     
                     // Show AI analysis result
                     const usedDomFallback = hasFailedRequests && response.domContent;
@@ -627,13 +793,35 @@ ${'='.repeat(80)}
                     // Optionally show raw data
                     const showRawButton = document.createElement('button');
                     showRawButton.textContent = 'Show Raw Network Data';
-                    showRawButton.style.cssText = 'margin-top: 15px; padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;';
+                    showRawButton.style.cssText = 'margin-top: 0; padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;';
+                    
+                    // Download Raw Data button
+                    const downloadRawButton = document.createElement('button');
+                    downloadRawButton.textContent = 'Download Raw Data';
+                    downloadRawButton.style.cssText = 'margin-top: 15px; margin-bottom: 10px; padding: 10px 20px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;';
+                    downloadRawButton.onclick = () => {
+                        const rawText = formatNetworkData(response.data, '', {});
+                        const blob = new Blob([rawText], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'network-raw-data.txt';
+                        document.body.appendChild(a);
+                        a.click();
+                        setTimeout(() => {
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                        }, 100);
+                    };
+                    
+                    // Show/Hide Raw Network Data button
+                    showRawButton.textContent = 'Show Raw Network Data';
+                    showRawButton.style.cssText = 'margin-top: 0; padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;';
                     showRawButton.onclick = () => {
                         const formattedData = formatNetworkData(response.data, '', {});
                         const preElement = document.createElement('pre');
                         preElement.style.cssText = 'white-space: pre-wrap; font-family: monospace; font-size: 13px; margin-top: 15px; background: white; padding: 15px; border-radius: 6px; border: 1px solid #ddd; max-height: 400px; overflow-y: auto;';
                         preElement.innerHTML = formattedData;
-                        
                         // Replace or add the raw data
                         const existingPre = resultsDiv.querySelector('pre');
                         if (existingPre) {
@@ -641,7 +829,6 @@ ${'='.repeat(80)}
                         } else {
                             resultsDiv.appendChild(preElement);
                         }
-                        
                         showRawButton.textContent = 'Hide Raw Network Data';
                         showRawButton.onclick = () => {
                             preElement.remove();
@@ -649,6 +836,7 @@ ${'='.repeat(80)}
                             showRawButton.onclick = arguments.callee.bind(this);
                         };
                     };
+                    resultsDiv.appendChild(downloadRawButton);
                     resultsDiv.appendChild(showRawButton);
                     
                 } catch (error) {
@@ -673,40 +861,6 @@ ${'='.repeat(80)}
         });
     });
 
-    // Add event listeners for API key input
-    apiKeyInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            searchButton.click();
-        }
-    });
-    
-    // Save API key immediately when user types it
-    apiKeyInput.addEventListener('input', (e) => {
-        const apiKey = e.target.value.trim();
-        if (apiKey) {
-            saveApiKey(apiKey);
-            console.log('API key saved automatically');
-        }
-        checkApiKeyHighlight(); // Update highlighting
-    });
-    
-    // Also save when the field loses focus
-    apiKeyInput.addEventListener('blur', (e) => {
-        const apiKey = e.target.value.trim();
-        if (apiKey) {
-            saveApiKey(apiKey);
-            console.log('API key saved on blur');
-        }
-        checkApiKeyHighlight(); // Update highlighting
-    });
-
-    // Add event listener for AI query input
-    aiQueryInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            searchButton.click();
-        }
-    });
-
     // Hide validation message when URL is entered
     urlInput.addEventListener('input', () => {
         const queryValidation = document.getElementById('queryValidation');
@@ -719,5 +873,24 @@ ${'='.repeat(80)}
     apiKeyInput.value = loadApiKey();
     checkApiKeyHighlight(); // Initial highlight check
 
+    // Function to show/hide API key groups based on provider
+    function updateApiKeyVisibility() {
+        const provider = aiProviderSelect.value;
+        geminiApiKeyGroup.style.display = provider === 'gemini' ? '' : 'none';
+        openaiApiKeyGroup.style.display = provider === 'openai' ? '' : 'none';
+        openaiModelGroup.style.display = provider === 'openai' ? '' : 'none';
+    }
+
+    // Run on page load
+    updateApiKeyVisibility();
+    // Run on provider change
+    aiProviderSelect.addEventListener('change', updateApiKeyVisibility);
+
+    // On page load, set OpenAI model
+    openaiModelSelect.value = loadOpenAIModel();
+    // On model change, save
+    openaiModelSelect.addEventListener('change', (e) => {
+        saveOpenAIModel(e.target.value);
+    });
 
 }); 
