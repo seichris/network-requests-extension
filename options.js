@@ -627,13 +627,35 @@ ${'='.repeat(80)}
                     // Optionally show raw data
                     const showRawButton = document.createElement('button');
                     showRawButton.textContent = 'Show Raw Network Data';
-                    showRawButton.style.cssText = 'margin-top: 15px; padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;';
+                    showRawButton.style.cssText = 'margin-top: 0; padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;';
+                    
+                    // Download Raw Data button
+                    const downloadRawButton = document.createElement('button');
+                    downloadRawButton.textContent = 'Download Raw Data';
+                    downloadRawButton.style.cssText = 'margin-top: 15px; margin-bottom: 10px; padding: 10px 20px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;';
+                    downloadRawButton.onclick = () => {
+                        const rawText = formatNetworkData(response.data, '', {});
+                        const blob = new Blob([rawText], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'network-raw-data.txt';
+                        document.body.appendChild(a);
+                        a.click();
+                        setTimeout(() => {
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                        }, 100);
+                    };
+                    
+                    // Show/Hide Raw Network Data button
+                    showRawButton.textContent = 'Show Raw Network Data';
+                    showRawButton.style.cssText = 'margin-top: 0; padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;';
                     showRawButton.onclick = () => {
                         const formattedData = formatNetworkData(response.data, '', {});
                         const preElement = document.createElement('pre');
                         preElement.style.cssText = 'white-space: pre-wrap; font-family: monospace; font-size: 13px; margin-top: 15px; background: white; padding: 15px; border-radius: 6px; border: 1px solid #ddd; max-height: 400px; overflow-y: auto;';
                         preElement.innerHTML = formattedData;
-                        
                         // Replace or add the raw data
                         const existingPre = resultsDiv.querySelector('pre');
                         if (existingPre) {
@@ -641,7 +663,6 @@ ${'='.repeat(80)}
                         } else {
                             resultsDiv.appendChild(preElement);
                         }
-                        
                         showRawButton.textContent = 'Hide Raw Network Data';
                         showRawButton.onclick = () => {
                             preElement.remove();
@@ -649,6 +670,7 @@ ${'='.repeat(80)}
                             showRawButton.onclick = arguments.callee.bind(this);
                         };
                     };
+                    resultsDiv.appendChild(downloadRawButton);
                     resultsDiv.appendChild(showRawButton);
                     
                 } catch (error) {
