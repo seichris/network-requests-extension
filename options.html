@@ -62,6 +62,76 @@
       animation: pulse-red 2s infinite;
     }
     
+    /* Add styles for website URL highlighting */
+    .website-url-input.highlight-required {
+      border: 3px solid #e74c3c !important;
+      background-color: #ffeee8;
+      animation: pulse-red 2s infinite;
+    }
+    
+    /* Styles for network request URL fields */
+    .network-url-container {
+      margin-bottom: 15px;
+    }
+    
+    .network-url-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    
+    .network-url-input {
+      flex: 1;
+      margin-right: 8px;
+    }
+    
+    .add-url-btn, .remove-url-btn {
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: bold;
+      margin-left: 8px;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .add-url-btn {
+      background-color: #27ae60;
+      color: white;
+      margin-top: 0px;
+    }
+    
+    .add-url-btn:hover {
+      background-color: #219a52;
+    }
+    
+    .remove-url-btn {
+      background-color: #e74c3c;
+      color: white;
+    }
+    
+    .remove-url-btn:hover {
+      background-color: #c0392b;
+    }
+    
+    .network-urls-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    
+    .network-urls-description {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 10px;
+    }
+    
     @keyframes pulse-red {
       0% { box-shadow: 0 0 5px rgba(231, 76, 60, 0.3); }
       50% { box-shadow: 0 0 15px rgba(231, 76, 60, 0.6); }
@@ -163,6 +233,104 @@
       border: 1px solid #f5c6cb;
       color: #721c24;
     }
+
+          /* Advanced section styles */
+     /* .advanced-section {
+        margin-top: 25px;
+        border-top: 1px solid #e9ecef;
+        padding-top: 20px;
+     } */
+
+    .advanced-toggle {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      padding: 12px 0;
+      background: none;
+      border: none;
+      width: 100%;
+      font-size: 16px;
+      font-weight: 600;
+      color: black;
+      text-align: left;
+      transition: all 0.2s ease;
+      user-select: none;
+      margin-top: 0px;
+    }
+
+    .advanced-toggle:hover {
+      color: #495057;
+      background-color: white !important;
+    }
+
+    .chevron {
+      margin-right: 8px;
+      transition: transform 0.2s ease;
+      font-size: 14px;
+    }
+
+    .chevron.rotated {
+      transform: rotate(90deg);
+    }
+
+    .advanced-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .advanced-content.expanded {
+      max-height: 500px;
+    }
+
+    .advanced-fields {
+      padding-top: 10px;
+    }
+
+    /* API Key section styles */
+    .api-key-section {
+      margin-bottom: 20px;
+    }
+
+    .api-key-toggle {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      padding: 12px 0;
+      background: none;
+      border: none;
+      width: 100%;
+      font-size: 16px;
+      font-weight: 600;
+      color: black;
+      text-align: left;
+      transition: all 0.2s ease;
+      user-select: none;
+      margin-top: 0px;
+    }
+
+    .api-key-toggle:hover {
+      /* color: #34495e; */
+      background-color: white !important;
+    }
+
+    .api-key-toggle.collapsed {
+      color: #27ae60;
+    }
+
+    .api-key-content {
+      max-height: 200px;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .api-key-content.collapsed {
+      max-height: 0;
+    }
+
+    .api-key-fields {
+      padding-top: 8px;
+    }
   </style>
 </head>
 <body>
@@ -174,12 +342,23 @@
     </div>
     
     <!-- Gemini API Key Section -->
-    <div class="input-group">
-      <label for="apiKey">Gemini API Key:</label>
-      <input type="password" id="apiKey" placeholder="Enter your Gemini API key (saved locally)" class="api-key-input">
-      <div style="font-size: 12px; color: #666; margin-top: 5px;">
-        Your API key is stored locally in your browser and never sent to our servers. 
-        <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: #3498db;">Get your API key</a>
+    <div class="api-key-section">
+      <button type="button" class="api-key-toggle" id="apiKeyToggle">
+        <span class="chevron api-key-chevron">▼</span>
+        <span id="apiKeyToggleText">Gemini API Key:</span>
+      </button>
+      
+      <div class="api-key-content" id="apiKeyContent">
+        <div class="api-key-fields">
+          <div class="input-group">
+            <label for="apiKey">Gemini API Key:</label>
+            <input type="password" id="apiKey" placeholder="Enter your Gemini API key (saved locally)" class="api-key-input">
+            <div style="font-size: 12px; color: #666; margin-top: 5px;">
+              Your API key is stored locally in your browser. 
+              <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: #3498db;">Get your API key</a>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -195,12 +374,40 @@
       </div>
     </div>
 
-    <!-- Optional Website URL -->
-    <div class="input-group">
-      <label for="url">Website URL (optional):</label>
-      <input type="text" id="url" placeholder="e.g., youtube.com, instagram.com - leave blank to let AI suggest">
-      <div style="font-size: 12px; color: #666; margin-top: 5px;">
-        If you don't specify a URL, AI can suggest the best website to visit based on your query.
+    <!-- Advanced Section -->
+    <div class="advanced-section">
+      <button type="button" class="advanced-toggle" id="advancedToggle">
+        <span class="chevron">▶</span>
+        Advanced
+      </button>
+      
+      <div class="advanced-content" id="advancedContent">
+        <div class="advanced-fields">
+          <!-- Optional Website URL -->
+          <div class="input-group">
+            <label for="url">Website URL (optional):</label>
+            <input type="text" id="url" placeholder="e.g., youtube.com, instagram.com - leave blank to let AI suggest" class="website-url-input">
+            <div style="font-size: 12px; color: #666; margin-top: 5px;">
+              If you don't specify a URL, AI can suggest the best website to visit based on your query.
+            </div>
+          </div>
+
+          <!-- Network Request URLs -->
+          <div class="input-group">
+            <div class="network-urls-header">
+              <label for="networkUrls">Network Request URLs (optional):</label>
+            </div>
+            <div id="networkUrlsContainer" class="network-url-container">
+              <div class="network-url-row">
+                <input type="text" class="network-url-input" placeholder="e.g., api.example.com/user, graph.facebook.com/me" data-index="0">
+                <button type="button" class="add-url-btn">+</button>
+              </div>
+            </div>
+            <div class="network-urls-description">
+              Add specific request URLs to analyze. When provided, only these URLs will be captured and analyzed. Requires Website URL to be filled. Leave "What are you looking for?" empty to get raw data without AI analysis.
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     

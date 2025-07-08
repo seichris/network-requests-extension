@@ -30,6 +30,138 @@ document.addEventListener('DOMContentLoaded', function() {
     // Set focus to AI query input on load (since it's the primary field)
     aiQueryInput.focus();
 
+    // Network URL management functions
+    let networkUrlIndex = 0;
+    
+    // Function to add a new network URL field
+    const addNetworkUrlField = () => {
+        networkUrlIndex++;
+        const container = document.getElementById('networkUrlsContainer');
+        const newRow = document.createElement('div');
+        newRow.className = 'network-url-row';
+        newRow.innerHTML = `
+            <input type="text" class="network-url-input" placeholder="e.g., api.example.com/user, graph.facebook.com/me" data-index="${networkUrlIndex}">
+            <button type="button" class="remove-url-btn">−</button>
+        `;
+        container.appendChild(newRow);
+    };
+    
+    // Function to remove a network URL field
+    const removeNetworkUrlField = (button) => {
+        const row = button.closest('.network-url-row');
+        if (row) {
+            row.remove();
+        }
+    };
+    
+    // Function to toggle advanced section
+    const toggleAdvanced = () => {
+        const content = document.getElementById('advancedContent');
+        const chevron = document.querySelector('.chevron');
+        
+        if (content.classList.contains('expanded')) {
+            content.classList.remove('expanded');
+            chevron.classList.remove('rotated');
+        } else {
+            content.classList.add('expanded');
+            chevron.classList.add('rotated');
+        }
+    };
+
+    // Function to toggle API key section
+    const toggleApiKey = () => {
+        const content = document.getElementById('apiKeyContent');
+        const toggle = document.getElementById('apiKeyToggle');
+        const chevron = document.querySelector('.api-key-chevron');
+        
+        if (content.classList.contains('collapsed')) {
+            content.classList.remove('collapsed');
+            toggle.classList.remove('collapsed');
+            chevron.textContent = '▼';
+        } else {
+            content.classList.add('collapsed');
+            toggle.classList.add('collapsed');
+            chevron.textContent = '▶';
+        }
+        updateApiKeyToggleText();
+    };
+
+    // Function to update API key toggle text
+    const updateApiKeyToggleText = () => {
+        const content = document.getElementById('apiKeyContent');
+        const toggleText = document.getElementById('apiKeyToggleText');
+        const apiKey = apiKeyInput.value.trim();
+        
+        if (content.classList.contains('collapsed') && apiKey) {
+            toggleText.textContent = 'Gemini API Key ✓';
+        } else {
+            toggleText.textContent = 'Gemini API Key:';
+        }
+    };
+
+    // Function to check and auto-collapse API key section
+    const checkApiKeyCollapse = () => {
+        const content = document.getElementById('apiKeyContent');
+        const toggle = document.getElementById('apiKeyToggle');
+        const chevron = document.querySelector('.api-key-chevron');
+        const apiKey = apiKeyInput.value.trim();
+        
+        if (apiKey && !content.classList.contains('collapsed')) {
+            // Auto-collapse when API key is filled
+            content.classList.add('collapsed');
+            toggle.classList.add('collapsed');
+            chevron.textContent = '▶';
+        } else if (!apiKey && content.classList.contains('collapsed')) {
+            // Auto-expand when API key is empty
+            content.classList.remove('collapsed');
+            toggle.classList.remove('collapsed');
+            chevron.textContent = '▼';
+        }
+        updateApiKeyToggleText();
+    };
+
+    // Function to force expand API key section (for errors)
+    const expandApiKeySection = () => {
+        const content = document.getElementById('apiKeyContent');
+        const toggle = document.getElementById('apiKeyToggle');
+        const chevron = document.querySelector('.api-key-chevron');
+        
+        content.classList.remove('collapsed');
+        toggle.classList.remove('collapsed');
+        chevron.textContent = '▼';
+        updateApiKeyToggleText();
+    };
+    
+    // Function to get all network URLs
+    const getNetworkUrls = () => {
+        const inputs = document.querySelectorAll('.network-url-input');
+        const urls = [];
+        inputs.forEach(input => {
+            const url = input.value.trim();
+            if (url) {
+                urls.push(url);
+            }
+        });
+        return urls;
+    };
+    
+    // Function to check if any network URLs are provided
+    const hasNetworkUrls = () => {
+        return getNetworkUrls().length > 0;
+    };
+    
+    // Function to highlight website URL field when required
+    const checkWebsiteUrlHighlight = () => {
+        const websiteUrl = urlInput.value.trim();
+        const networkUrls = hasNetworkUrls();
+        
+        if (networkUrls && !websiteUrl) {
+            urlInput.classList.add('highlight-required');
+        } else {
+            urlInput.classList.remove('highlight-required');
+        }
+    };
+
     // Function to safely escape HTML to prevent XSS
     const escapeHTML = (str) => {
         const p = document.createElement('p');
@@ -76,6 +208,49 @@ document.addEventListener('DOMContentLoaded', function() {
             apiKeyInput.classList.add('highlight-required');
         } else {
             apiKeyInput.classList.remove('highlight-required');
+        }
+    };
+
+    // Function to show/hide API key error message
+    const showApiKeyError = (show = true) => {
+        const apiKeyContainer = document.querySelector('.input-group:has(#apiKey)');
+        let errorDiv = apiKeyContainer.querySelector('.api-key-error');
+        
+        if (show) {
+            if (!errorDiv) {
+                errorDiv = document.createElement('div');
+                errorDiv.className = 'api-key-error';
+                errorDiv.style.cssText = 'font-size: 13px; color: #e74c3c; margin-top: 8px; display: flex; align-items: center; gap: 4px;';
+                errorDiv.innerHTML = `
+                    <span>❌ Check your API key.</span>
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: #3498db; text-decoration: none;">Get API key</a>
+                `;
+                
+                // Insert after the existing description div
+                const descriptionDiv = apiKeyContainer.querySelector('div[style*="font-size: 12px"]');
+                if (descriptionDiv) {
+                    descriptionDiv.insertAdjacentElement('afterend', errorDiv);
+                } else {
+                    apiKeyContainer.appendChild(errorDiv);
+                }
+            }
+            errorDiv.style.display = 'flex';
+        } else {
+            if (errorDiv) {
+                errorDiv.style.display = 'none';
+            }
+        }
+    };
+
+    // Function to highlight API key input for errors
+    const highlightApiKeyError = (highlight = true) => {
+        if (highlight) {
+            apiKeyInput.classList.add('highlight-required');
+            showApiKeyError(true);
+            expandApiKeySection(); // Auto-expand on error
+        } else {
+            apiKeyInput.classList.remove('highlight-required');
+            showApiKeyError(false);
         }
     };
 
@@ -126,6 +301,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 
                 console.warn('Invalid response format from Gemini API:', data);
+            } else {
+                // Throw error for 400 status codes (API key issues)
+                if (response.status === 400) {
+                    throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+                }
             }
         } catch (error) {
             console.warn('URL suggestion failed:', error);
@@ -487,29 +667,44 @@ ${'='.repeat(80)}
         let url = urlInput.value.trim();
         const apiKey = apiKeyInput.value.trim();
         const aiQuery = aiQueryInput.value.trim();
+        const networkUrls = getNetworkUrls();
         
-        console.log('AI Search button clicked', { url, hasApiKey: !!apiKey, aiQuery });
+        console.log('AI Search button clicked', { url, hasApiKey: !!apiKey, aiQuery, networkUrls });
 
+        // Check if we're in raw data mode (no AI query but have website URL and network URLs)
+        const isRawDataMode = !aiQuery && url && networkUrls.length > 0;
+        
         // Validate required fields
-        if (!apiKey) {
+        if (!apiKey && !isRawDataMode) {
             checkApiKeyHighlight();
             resultsDiv.innerHTML = '';
-            resultsDiv.appendChild(createStatusMessage('error', '❌ Please enter your Gemini API key first.'));
+            resultsDiv.appendChild(createStatusMessage('error', '❌ Please enter your Gemini API key first, or provide both Website URL and Network Request URLs for raw data mode.'));
             return;
         }
         
-        if (!aiQuery) {
+        if (!aiQuery && !isRawDataMode) {
             resultsDiv.innerHTML = '';
-            resultsDiv.appendChild(createStatusMessage('error', '❌ Please tell me what you\'re looking for.'));
+            resultsDiv.appendChild(createStatusMessage('error', '❌ Please tell me what you\'re looking for, or provide both Website URL and Network Request URLs to get raw data only.'));
             return;
         }
         
-        // Save API key for future use
-        saveApiKey(apiKey);
-        checkApiKeyHighlight(); // Remove highlight if key is valid
+        // Check if network URLs are provided but website URL is not
+        if (networkUrls.length > 0 && !url) {
+            checkWebsiteUrlHighlight();
+            resultsDiv.innerHTML = '';
+            resultsDiv.appendChild(createStatusMessage('error', '❌ Website URL is required when Network Request URLs are provided.'));
+            return;
+        }
+        
+        // Save API key for future use (only if provided)
+        if (apiKey) {
+            saveApiKey(apiKey);
+            checkApiKeyHighlight(); // Remove highlight if key is valid
+        }
+        checkWebsiteUrlHighlight(); // Remove highlight if validation passes
 
-        // If no URL provided, try to suggest one
-        if (!url) {
+        // If no URL provided, try to suggest one (only if not in raw data mode)
+        if (!url && !isRawDataMode) {
             console.log('No URL provided, asking AI for suggestion...');
             const queryValidation = document.getElementById('queryValidation');
             
@@ -530,7 +725,14 @@ ${'='.repeat(80)}
             } catch (error) {
                 console.error('URL suggestion failed:', error);
                 resultsDiv.innerHTML = '';
-                resultsDiv.appendChild(createStatusMessage('error', '❌ Could not suggest a URL. Please specify a website to analyze.'));
+                
+                // Check if it's a 400 error (likely API key issue)
+                if (error.message && error.message.includes('400')) {
+                    highlightApiKeyError(true);
+                    resultsDiv.appendChild(createStatusMessage('error', `❌ API Key Error: ${escapeHTML(error.message)}<br><small>Please check your API key above.</small>`));
+                } else {
+                    resultsDiv.appendChild(createStatusMessage('error', '❌ Could not suggest a URL. Please specify a website to analyze.'));
+                }
                 return;
             }
         }
@@ -545,7 +747,16 @@ ${'='.repeat(80)}
         const originalButtonText = searchButton.textContent;
         searchButton.textContent = '⏳ Analyzing...';
         
-        updateAnalysisStatus(`🚀 Opening tab for: ${escapeHTML(finalUrl)}<br>📡 Capturing network requests for AI analysis...`);
+        let statusMsg = `🚀 Opening tab for: ${escapeHTML(finalUrl)}<br>📡 Capturing network requests`;
+        if (isRawDataMode) {
+            statusMsg += ` for raw data extraction...`;
+        } else {
+            statusMsg += ` for AI analysis...`;
+        }
+        if (networkUrls.length > 0) {
+            statusMsg += `<br>🎯 Filtering by ${networkUrls.length} specific network URL(s)`;
+        }
+        updateAnalysisStatus(statusMsg);
 
         // Start monitoring for page load (this is a rough estimate)
         setTimeout(() => {
@@ -553,7 +764,7 @@ ${'='.repeat(80)}
         }, 2000);
 
         // Send message to background script
-        chrome.runtime.sendMessage({ type: 'startAnalysis', url: finalUrl }, async (response) => {
+        chrome.runtime.sendMessage({ type: 'startAnalysis', url: finalUrl, networkUrls: networkUrls }, async (response) => {
             console.log('Received response from background:', response);
             
             searchButton.disabled = false;
@@ -587,73 +798,107 @@ ${'='.repeat(80)}
                     });
                 }
 
-                // AI Mode Processing (always AI mode now)
-                try {
+                // Check if we're in raw data mode or AI mode
+                if (isRawDataMode) {
+                    // Raw data mode - show data directly without AI analysis
                     const totalRequests = response.data.length;
-                    const hasFailedRequests = response.data.some(req => 
-                        req.responseBody && req.responseBody.includes('Response body not available')
-                    );
                     
-                    let statusMessage = `🤖 Processing ${totalRequests} requests with AI...<br><small>Stage 1: Generating search keywords...</small>`;
-                    if (hasFailedRequests && response.domContent) {
-                        statusMessage += `<br><small>📄 Also using captured page content as fallback for failed network requests</small>`;
-                    }
-                    
-                    updateAnalysisStatus(statusMessage);
-                    
-                    const aiResult = await makeGeminiRequest(apiKey, response.data, aiQuery);
-                    
-                    // Show AI analysis result
-                    const usedDomFallback = hasFailedRequests && response.domContent;
-                    
-                    let successMessage = `✅ AI Analysis Complete! Processed <strong>${response.data.length}</strong> network request(s)<br>
-                        <strong>Query:</strong> "${escapeHTML(aiQuery)}"<br>
+                    let successMessage = `✅ Raw Data Captured! Retrieved <strong>${totalRequests}</strong> network request(s)<br>
                         <strong>Website:</strong> ${escapeHTML(finalUrl)}<br>
-                        <small>Used smart filtering to minimize token usage. Analysis tab closed automatically.</small>`;
-                    
-                    if (usedDomFallback) {
-                        successMessage += `<br><small>📄 Used page content as fallback for requests that couldn't be captured via network monitoring.</small>`;
-                    }
+                        <strong>Filtered by:</strong> ${networkUrls.length} specific network URL(s)<br>
+                        <small>Analysis tab closed automatically.</small>`;
                     
                     const summaryDiv = createStatusMessage('success', successMessage);
                     resultsDiv.appendChild(summaryDiv);
                     
-                    // Show AI response
-                    const aiResponseDiv = document.createElement('div');
-                    aiResponseDiv.style.cssText = 'background: white; padding: 20px; border-radius: 6px; border: 1px solid #ddd; margin-top: 15px; white-space: pre-wrap; font-family: system-ui; line-height: 1.6;';
-                    aiResponseDiv.innerHTML = escapeHTML(aiResult).replace(/\n/g, '<br>');
-                    resultsDiv.appendChild(aiResponseDiv);
+                    // Show raw data directly
+                    const formattedData = formatNetworkData(response.data, '', {});
+                    const preElement = document.createElement('pre');
+                    preElement.style.cssText = 'white-space: pre-wrap; font-family: monospace; font-size: 13px; margin-top: 15px; background: white; padding: 15px; border-radius: 6px; border: 1px solid #ddd; max-height: 600px; overflow-y: auto;';
+                    preElement.innerHTML = formattedData;
+                    resultsDiv.appendChild(preElement);
                     
-                    // Optionally show raw data
-                    const showRawButton = document.createElement('button');
-                    showRawButton.textContent = 'Show Raw Network Data';
-                    showRawButton.style.cssText = 'margin-top: 15px; padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;';
-                    showRawButton.onclick = () => {
-                        const formattedData = formatNetworkData(response.data, '', {});
-                        const preElement = document.createElement('pre');
-                        preElement.style.cssText = 'white-space: pre-wrap; font-family: monospace; font-size: 13px; margin-top: 15px; background: white; padding: 15px; border-radius: 6px; border: 1px solid #ddd; max-height: 400px; overflow-y: auto;';
-                        preElement.innerHTML = formattedData;
+                } else {
+                    // AI Mode Processing
+                    try {
+                        const totalRequests = response.data.length;
+                        const hasFailedRequests = response.data.some(req => 
+                            req.responseBody && req.responseBody.includes('Response body not available')
+                        );
                         
-                        // Replace or add the raw data
-                        const existingPre = resultsDiv.querySelector('pre');
-                        if (existingPre) {
-                            existingPre.replaceWith(preElement);
-                        } else {
-                            resultsDiv.appendChild(preElement);
+                        let statusMessage = `🤖 Processing ${totalRequests} requests with AI...<br><small>Stage 1: Generating search keywords...</small>`;
+                        if (hasFailedRequests && response.domContent) {
+                            statusMessage += `<br><small>📄 Also using captured page content as fallback for failed network requests</small>`;
                         }
                         
-                        showRawButton.textContent = 'Hide Raw Network Data';
+                        updateAnalysisStatus(statusMessage);
+                        
+                        const aiResult = await makeGeminiRequest(apiKey, response.data, aiQuery);
+                        
+                        // Show AI analysis result
+                        const usedDomFallback = hasFailedRequests && response.domContent;
+                        
+                        let successMessage = `✅ AI Analysis Complete! Processed <strong>${response.data.length}</strong> network request(s)<br>
+                            <strong>Query:</strong> "${escapeHTML(aiQuery)}"<br>
+                            <strong>Website:</strong> ${escapeHTML(finalUrl)}<br>`;
+                        
+                        if (networkUrls.length > 0) {
+                            successMessage += `<strong>Filtered by:</strong> ${networkUrls.length} specific network URL(s)<br>`;
+                        }
+                        
+                        successMessage += `<small>Used smart filtering to minimize token usage. Analysis tab closed automatically.</small>`;
+                        
+                        if (usedDomFallback) {
+                            successMessage += `<br><small>📄 Used page content as fallback for requests that couldn't be captured via network monitoring.</small>`;
+                        }
+                        
+                        const summaryDiv = createStatusMessage('success', successMessage);
+                        resultsDiv.appendChild(summaryDiv);
+                        
+                        // Show AI response
+                        const aiResponseDiv = document.createElement('div');
+                        aiResponseDiv.style.cssText = 'background: white; padding: 20px; border-radius: 6px; border: 1px solid #ddd; margin-top: 15px; white-space: pre-wrap; font-family: system-ui; line-height: 1.6;';
+                        aiResponseDiv.innerHTML = escapeHTML(aiResult).replace(/\n/g, '<br>');
+                        resultsDiv.appendChild(aiResponseDiv);
+                        
+                        // Optionally show raw data
+                        const showRawButton = document.createElement('button');
+                        showRawButton.textContent = 'Show Raw Network Data';
+                        showRawButton.style.cssText = 'margin-top: 15px; padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;';
                         showRawButton.onclick = () => {
-                            preElement.remove();
-                            showRawButton.textContent = 'Show Raw Network Data';
-                            showRawButton.onclick = arguments.callee.bind(this);
+                            const formattedData = formatNetworkData(response.data, '', {});
+                            const preElement = document.createElement('pre');
+                            preElement.style.cssText = 'white-space: pre-wrap; font-family: monospace; font-size: 13px; margin-top: 15px; background: white; padding: 15px; border-radius: 6px; border: 1px solid #ddd; max-height: 400px; overflow-y: auto;';
+                            preElement.innerHTML = formattedData;
+                            
+                            // Replace or add the raw data
+                            const existingPre = resultsDiv.querySelector('pre');
+                            if (existingPre) {
+                                existingPre.replaceWith(preElement);
+                            } else {
+                                resultsDiv.appendChild(preElement);
+                            }
+                            
+                            showRawButton.textContent = 'Hide Raw Network Data';
+                            showRawButton.onclick = () => {
+                                preElement.remove();
+                                showRawButton.textContent = 'Show Raw Network Data';
+                                showRawButton.onclick = arguments.callee.bind(this);
+                            };
                         };
-                    };
-                    resultsDiv.appendChild(showRawButton);
-                    
-                } catch (error) {
-                    console.error('AI processing error:', error);
-                    resultsDiv.appendChild(createStatusMessage('error', `❌ AI Analysis Error: ${escapeHTML(error.message)}<br><small>Please check your API key and try again.</small>`));
+                        resultsDiv.appendChild(showRawButton);
+                        
+                    } catch (error) {
+                        console.error('AI processing error:', error);
+                        
+                        // Check if it's a 400 error (likely API key issue)
+                        if (error.message && error.message.includes('400')) {
+                            highlightApiKeyError(true);
+                            resultsDiv.appendChild(createStatusMessage('error', `❌ API Key Error: ${escapeHTML(error.message)}<br><small>Please check your API key above.</small>`));
+                        } else {
+                            resultsDiv.appendChild(createStatusMessage('error', `❌ AI Analysis Error: ${escapeHTML(error.message)}<br><small>Please check your API key and try again.</small>`));
+                        }
+                    }
                 }
             } else {
                 console.warn('No data received in response:', response);
@@ -688,6 +933,8 @@ ${'='.repeat(80)}
             console.log('API key saved automatically');
         }
         checkApiKeyHighlight(); // Update highlighting
+        highlightApiKeyError(false); // Clear error state when typing
+        checkApiKeyCollapse(); // Check if should auto-collapse
     });
     
     // Also save when the field loses focus
@@ -698,6 +945,8 @@ ${'='.repeat(80)}
             console.log('API key saved on blur');
         }
         checkApiKeyHighlight(); // Update highlighting
+        highlightApiKeyError(false); // Clear error state when field loses focus
+        checkApiKeyCollapse(); // Check if should auto-collapse
     });
 
     // Add event listener for AI query input
@@ -713,11 +962,42 @@ ${'='.repeat(80)}
         if (urlInput.value.trim()) {
             queryValidation.style.display = 'none';
         }
+        checkWebsiteUrlHighlight(); // Check highlighting when URL changes
+    });
+
+    // Add event listeners for network URL fields (using event delegation)
+    document.addEventListener('input', (e) => {
+        if (e.target.classList.contains('network-url-input')) {
+            checkWebsiteUrlHighlight(); // Check highlighting when network URLs change
+        }
     });
 
     // Load saved API key and check highlighting
     apiKeyInput.value = loadApiKey();
     checkApiKeyHighlight(); // Initial highlight check
 
+    // Add event listener for advanced toggle
+    const advancedToggle = document.getElementById('advancedToggle');
+    if (advancedToggle) {
+        advancedToggle.addEventListener('click', toggleAdvanced);
+    }
+
+    // Add event listener for API key toggle
+    const apiKeyToggle = document.getElementById('apiKeyToggle');
+    if (apiKeyToggle) {
+        apiKeyToggle.addEventListener('click', toggleApiKey);
+    }
+
+    // Add event delegation for network URL buttons
+    document.addEventListener('click', (e) => {
+        if (e.target.classList.contains('add-url-btn')) {
+            addNetworkUrlField();
+        } else if (e.target.classList.contains('remove-url-btn')) {
+            removeNetworkUrlField(e.target);
+        }
+    });
+
+    // Initialize API key section state
+    checkApiKeyCollapse();
 
 }); 

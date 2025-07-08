@@ -6,6 +6,7 @@ let requestsMap = new Map(); // To match requests with responses
 let analysisCallback = null;
 let analysisTimer = null;
 let domContent = null; // Store captured DOM content
+let networkUrlsFilter = []; // Store network URLs to filter by
 
 console.log('Background script loaded');
 
@@ -65,6 +66,7 @@ const stopAnalysis = () => {
     requestsMap.clear();
     analysisCallback = null;
     domContent = null; // Reset DOM content
+    networkUrlsFilter = []; // Reset network URLs filter
     console.log('  ✅ Cleanup complete');
 };
 
@@ -78,15 +80,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         stopAnalysis();
     }
 
-    const { url } = request;
+    const { url, networkUrls } = request;
+    networkUrlsFilter = networkUrls || []; // Store network URLs filter
     console.log(`🚀 Starting analysis for: ${url}`);
+    if (networkUrlsFilter.length > 0) {
+        console.log(`📡 Filtering by network URLs: ${networkUrlsFilter.join(', ')}`);
+    }
     networkData = [];
     requestsMap.clear();
     domContent = null; // Reset DOM content
     analysisCallback = sendResponse;
 
-    chrome.tabs.create({ url: url }, (newTab) => {
-      console.log(`📂 Created new tab: ${newTab.id} for ${url}`);
+    // Create a blank tab first, then attach debugger, then navigate
+    chrome.tabs.create({ url: 'about:blank' }, (newTab) => {
+      console.log(`📂 Created blank tab: ${newTab.id}, will navigate to ${url}`);
       tabId = newTab.id;
       
       chrome.debugger.attach({ tabId: tabId }, NETWORK_CONFIG.DEBUGGER_VERSION, () => {
@@ -102,12 +109,36 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         
         console.log('🔧 Debugger attached successfully');
         
-        // Enable Network domain
+        // Enable Network domain with additional events for complete header capture
         chrome.debugger.sendCommand({ tabId: tabId }, 'Network.enable', {}, () => {
           if (chrome.runtime.lastError) {
             console.error('❌ Failed to enable Network domain:', chrome.runtime.lastError);
+            if (analysisCallback) {
+              analysisCallback({ error: chrome.runtime.lastError.message });
+            }
+            return;
           } else {
             console.log('🌐 Network domain enabled');
+            
+            // Enable extra info events to capture complete headers including cookies
+            chrome.debugger.sendCommand({ tabId: tabId }, 'Network.enableReportingApi', { enable: true }, () => {
+              if (chrome.runtime.lastError) {
+                console.log('⚠️ Could not enable reporting API (might not be available):', chrome.runtime.lastError.message);
+              }
+            });
+            
+            // Now navigate to the actual URL - this ensures we capture the main document request
+            console.log(`🧭 Navigating to: ${url}`);
+            chrome.tabs.update(tabId, { url: url }, () => {
+              if (chrome.runtime.lastError) {
+                console.error('❌ Failed to navigate to URL:', chrome.runtime.lastError);
+                if (analysisCallback) {
+                  analysisCallback({ error: chrome.runtime.lastError.message });
+                }
+                return;
+              }
+              console.log('🚀 Navigation started successfully');
+            });
           }
         });
       });
@@ -177,8 +208,30 @@ chrome.tabs.onUpdated.addListener((updatedTabId, changeInfo) => {
 chrome.debugger.onEvent.addListener((source, method, params) => {
   if (source.tabId && source.tabId === tabId) {
     
+    // Debug: Log all Network events we receive
+    if (method.startsWith('Network.')) {
+      console.log(`🔧 Network event: ${method}`);
+    }
+    
     if (method === 'Network.requestWillBeSent') {
       console.log(`📤 Request: ${params.request.method} ${params.request.url}`);
+      
+      // If network URLs filter is active, check if this request matches any of the filtered URLs
+      if (networkUrlsFilter.length > 0) {
+        const requestUrl = params.request.url;
+        const matchesFilter = networkUrlsFilter.some(filterUrl => {
+          // Check if the request URL contains the filter URL
+          return requestUrl.includes(filterUrl) || filterUrl.includes(requestUrl);
+        });
+        
+        if (!matchesFilter) {
+          console.log(`⏭️  Skipping request (doesn't match filter): ${requestUrl}`);
+          return; // Skip this request
+        }
+        
+        console.log(`✅ Request matches filter: ${requestUrl}`);
+      }
+      
       // Capture request details
       const requestData = {
         requestId: params.requestId,
@@ -197,9 +250,80 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
       requestsMap.set(params.requestId, requestData);
     }
     
+    // Handle extra request info with complete headers including cookies
+    else if (method === 'Network.requestWillBeSentExtraInfo') {
+      console.log(`🔍 Extra request info for: ${params.requestId}`);
+      const requestData = requestsMap.get(params.requestId);
+      if (requestData && params.headers) {
+        // Merge the extra headers with existing headers
+        console.log(`  📋 Updating headers with complete info (${Object.keys(params.headers).length} headers)`);
+        requestData.requestHeaders = { ...requestData.requestHeaders, ...params.headers };
+        
+        // Log some of the extra headers we got
+        const extraHeaderKeys = Object.keys(params.headers);
+        if (extraHeaderKeys.includes('cookie')) {
+          console.log(`  🍪 Cookie header captured`);
+        }
+        if (extraHeaderKeys.includes('priority')) {
+          console.log(`  ⚡ Priority header captured`);
+        }
+      }
+    }
+    
     else if (method === 'Network.responseReceived') {
       console.log(`📥 Response: ${params.response.status} for ${params.response.url}`);
-      const requestData = requestsMap.get(params.requestId);
+      let requestData = requestsMap.get(params.requestId);
+      
+      // If we don't have the request data (main document request might be missed), create it if it matches filter
+      if (!requestData) {
+        // Check if this response matches our filter
+        if (networkUrlsFilter.length > 0) {
+          const responseUrl = params.response.url;
+          const matchesFilter = networkUrlsFilter.some(filterUrl => {
+            return responseUrl.includes(filterUrl) || filterUrl.includes(responseUrl);
+          });
+          
+          if (matchesFilter) {
+            console.log(`✅ Creating missing request data for response that matches filter: ${responseUrl}`);
+            // Create request data for the missed request
+            requestData = {
+              requestId: params.requestId,
+              url: params.response.url,
+              method: 'GET', // Assume GET for main document
+              requestHeaders: {},
+              requestBody: null,
+              timestamp: params.timestamp,
+              responseReceived: false,
+              responseHeaders: null,
+              responseBody: null,
+              status: null,
+              mimeType: null
+            };
+            requestsMap.set(params.requestId, requestData);
+          } else {
+            console.log(`⏭️  Skipping response (doesn't match filter): ${responseUrl}`);
+            return;
+          }
+        } else {
+          // No filter, but we still missed the request - create basic entry
+          console.log(`⚠️  Creating missing request data for response: ${params.response.url}`);
+          requestData = {
+            requestId: params.requestId,
+            url: params.response.url,
+            method: 'GET',
+            requestHeaders: {},
+            requestBody: null,
+            timestamp: params.timestamp,
+            responseReceived: false,
+            responseHeaders: null,
+            responseBody: null,
+            status: null,
+            mimeType: null
+          };
+          requestsMap.set(params.requestId, requestData);
+        }
+      }
+      
       if (requestData) {
         // Update with response details
         requestData.responseReceived = true;
@@ -291,6 +415,17 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
         
         // Start the attempt
         attemptGetResponseBody();
+      }
+    }
+    
+    // Handle extra response info with complete headers
+    else if (method === 'Network.responseReceivedExtraInfo') {
+      console.log(`🔍 Extra response info for: ${params.requestId}`);
+      const requestData = requestsMap.get(params.requestId);
+      if (requestData && params.headers) {
+        // Merge the extra response headers with existing headers
+        console.log(`  📋 Updating response headers with complete info (${Object.keys(params.headers).length} headers)`);
+        requestData.responseHeaders = { ...requestData.responseHeaders, ...params.headers };
       }
     }
     
