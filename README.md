@@ -4,12 +4,7 @@ A Chrome extension that helps you find which network request contains the specif
 
 ## Why This Matters for zkTLS
 
-One of the main features of zkTLS is that it scales to any webservice, where traditional APIs only work for services that host them. This extension aims to make creating and maintaining zkTLS templates easier, and thus support zkTLS privacy by:
-
-- **Template Discovery**: Quickly identify which network requests contain the data you want to prove
-- **Request Mapping**: Understand the exact structure and location of information within responses
-- **Template Validation**: Verify that your zkTLS templates are targeting the correct network calls
-- **Universal Coverage**: Works with any website, enabling zkTLS proofs for services without public APIs
+One of the main features of zkTLS is that it scales to any webservice, where traditional APIs only work for services that host them. This extension aims to make creating and maintaining zkTLS templates easier, and thus allowing more people to create and maintain those APIs.
 
 ## Features
 
@@ -33,6 +28,11 @@ One of the main features of zkTLS is that it scales to any webservice, where tra
   - "Which request contains my profile picture URL?"
 - Smart analysis of all captured network data
 - Contextual answers with specific request details
+
+## Roadmap
+
+- Turn request into reclaim / primus / pluto / opacity templates
+- Add sidebar showing every past search
 
 ## Code Organization
 
