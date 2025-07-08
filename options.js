@@ -861,32 +861,14 @@ ${'='.repeat(80)}
                         aiResponseDiv.innerHTML = escapeHTML(aiResult).replace(/\n/g, '<br>');
                         resultsDiv.appendChild(aiResponseDiv);
                         
-                        // Optionally show raw data
-                        const showRawButton = document.createElement('button');
-                        showRawButton.textContent = 'Show Raw Network Data';
-                        showRawButton.style.cssText = 'margin-top: 15px; padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;';
-                        showRawButton.onclick = () => {
-                            const formattedData = formatNetworkData(response.data, '', {});
-                            const preElement = document.createElement('pre');
-                            preElement.style.cssText = 'white-space: pre-wrap; font-family: monospace; font-size: 13px; margin-top: 15px; background: white; padding: 15px; border-radius: 6px; border: 1px solid #ddd; max-height: 400px; overflow-y: auto;';
-                            preElement.innerHTML = formattedData;
-                            
-                            // Replace or add the raw data
-                            const existingPre = resultsDiv.querySelector('pre');
-                            if (existingPre) {
-                                existingPre.replaceWith(preElement);
-                            } else {
-                                resultsDiv.appendChild(preElement);
-                            }
-                            
-                            showRawButton.textContent = 'Hide Raw Network Data';
-                            showRawButton.onclick = () => {
-                                preElement.remove();
-                                showRawButton.textContent = 'Show Raw Network Data';
-                                showRawButton.onclick = arguments.callee.bind(this);
-                            };
-                        };
-                        resultsDiv.appendChild(showRawButton);
+                        // Auto-generate template if this was triggered by a template button
+                        if (window.currentAutoProcessTemplate) {
+                            console.log('🤖 Auto-generating template for:', window.currentAutoProcessTemplate);
+                            setTimeout(() => {
+                                autoGenerateTemplate(window.currentAutoProcessTemplate, response.data, aiQuery);
+                                window.currentAutoProcessTemplate = null; // Clear the flag
+                            }, 1000);
+                        }
                         
                     } catch (error) {
                         console.error('AI processing error:', error);
@@ -999,5 +981,1173 @@ ${'='.repeat(80)}
 
     // Initialize API key section state
     checkApiKeyCollapse();
+
+    // Template button functionality
+    const templateInput = document.getElementById('templateInput');
+    const templateDescription = document.getElementById('templateDescription');
+    const generateTemplateButton = document.getElementById('generateTemplate');
+    
+    // Debug: Check if all template elements are found
+    console.log('Template elements found:', {
+        templateInput: !!templateInput,
+        templateDescription: !!templateDescription,
+        generateTemplateButton: !!generateTemplateButton
+    });
+    
+    // Pluto template content
+    const plutoTemplate = `import { createSession } from '@plutoxyz/automation';
+import { chromium } from 'playwright-core';
+
+const PROVIDERS = [
+  { id: 'credentials', label: 'Email / Username' },
+  { id: 'google', label: 'Google' },
+];
+const LOGIN_URL = 'https://www.reddit.com/login/';
+
+/**
+ * Detect if we run into a 2FA page and handle it
+ * return Promise<void>
+ */
+const handleSecurityDetection = async () => {
+  const security = !!(
+    await page
+      .getByRole('textbox', { name: 'Verification code' })
+      .elementHandles()
+  ).length;
+
+  if (security) {
+    console.log('Reddit 2FA detected, prompting for security code');
+
+    const otp = await session.prompt({
+      title: 'Enter one time code',
+      description: 'Enter the one time code sent to your phone',
+      prompts: [
+        {
+          label: 'Code',
+          type: 'text',
+          attributes: {},
+        },
+      ],
+    });
+
+    console.log('Filling security code');
+    await page.getByRole('textbox', { name: 'Verification code' }).fill(otp[0]);
+    console.log('Security code filled');
+    await page.getByRole('button', { name: 'Check code' }).click();
+    await page.waitForLoadState('domcontentloaded');
+  } else {
+    console.log('No security code detected, continuing');
+  }
+};
+
+const promptAuthType = async () =>
+  await session.prompt({
+    title: 'Log in to Reddit',
+    description: 'Enter your credentials to Log in',
+    icon: 'reddit.com',
+    prompts: [
+      {
+        label: 'Login method',
+        type: 'login',
+        attributes: { providers: PROVIDERS },
+      },
+    ],
+  });
+
+/** Initialize session and initial prompt */
+const session = await createSession();
+
+/** Browser Setup */
+const cdp = await session.cdp();
+const browser = await chromium.connectOverCDP(cdp);
+const context = browser.contexts()[0];
+const page = context.pages()[0];
+
+const BLOCK_PATTERNS = ['**/home-feed/**', '**/analytics.js'];
+
+for (const pattern of BLOCK_PATTERNS) {
+  await context.route(pattern, (route) => {
+    console.log('❌ blocked', route.request().url());
+    route.abort();
+  });
+}
+
+console.log('Prompting for auth type');
+const [choice] = await promptAuthType();
+console.log('Login choice →', choice);
+
+/**
+ * Generic "ask again" prompt.  We fall back to this when the
+ * login-type=login prompt returns an "Invalid username or password"
+ * error that Reddit does not differentiate.
+ */
+const promptForCredentials = async (usernameError, passwordError) =>
+  session.prompt({
+    title: 'Login to Reddit',
+    description: 'Enter your Reddit credentials to prove your data',
+    prompts: [
+      {
+        label: 'Email or username',
+        type: 'text',
+        attributes: { min_length: 3, placeholder: 'Email or username' },
+        error: usernameError,
+      },
+      {
+        label: 'Password',
+        type: 'password',
+        attributes: { placeholder: 'Password' },
+        error: passwordError,
+      },
+    ],
+  });
+
+/**
+ * Fills the username and password fields on the Reddit login page.
+ * This function no longer prompts the user for credentials.
+ */
+const authUsernamePass = async (username, password) => {
+  console.log('Filling username');
+  await Promise.all([
+    page.getByRole('textbox', { name: /Email or username/i }).waitFor(),
+    page.getByRole('textbox', { name: /Password/i }).waitFor(),
+  ]);
+
+  await page
+    .getByRole('textbox', { name: /Email or username/i })
+    .fill(username);
+  await page.getByRole('textbox', { name: /Password/i }).fill(password);
+  await page.getByRole('button', { name: /Log In/i }).click();
+
+  const errorText = page.getByText(/invalid username|something went wrong/i);
+  const mfa = page.getByRole('textbox', { name: 'Verification code' });
+  const createButton = page.getByRole('link', { name: 'Create post' });
+
+  await Promise.race([
+    mfa.waitFor({ state: 'visible', timeout: 20000 }),
+    createButton.waitFor({ state: 'visible', timeout: 20000 }),
+    errorText.waitFor({ state: 'visible', timeout: 20000 }),
+  ]);
+
+  try {
+    const isCreateButtonVisible = await createButton.isVisible({
+      timeout: 2500,
+    });
+    if (isCreateButtonVisible) {
+      return;
+    }
+  } catch (e) {}
+
+  /* ── Invalid credentials handling ───────────────────────────── */
+  // Multiple types of error UIs surfacing: Either traditional helper-text or the newer banner variant
+  const sawError = await errorText
+    .isVisible({ timeout: 2500 })
+    .catch(() => false);
+
+  console.log('sawError', sawError);
+
+  if (sawError) {
+    console.log('Invalid username or password - re-prompting user');
+
+    const [newUsername, newPassword] = await promptForCredentials(
+      'Invalid username or password.',
+      'Invalid username or password.'
+    );
+
+    return authUsernamePass(newUsername, newPassword);
+  }
+
+  const has2FA = await page
+    .getByRole('textbox', { name: 'Verification code' })
+    .isVisible();
+
+  if (has2FA) {
+    console.log('Detected 2-Step Verification');
+    const [code] = await session.prompt({
+      title: 'Enter one time code',
+      description: 'Enter the one time code from your authenticator app',
+      prompts: [
+        {
+          label: 'Code',
+          type: 'text',
+          attributes: {},
+        },
+      ],
+    });
+
+    await page.getByRole('textbox', { name: 'Verification code' }).fill(code);
+    await page.getByRole('button', { name: 'Check code' }).click();
+  } else {
+    console.log('No 2-Step Verification detected, continuing');
+  }
+};
+
+const authGoogle = async (usernameError, passwordError) => {
+  // The Google button lives inside a GIS iframe.  Grab that frame first.
+  const gisFrame = page.frameLocator(
+    'iframe[src*="accounts.google.com/gsi/"][src*="button"]'
+  );
+
+  // Locator *inside* the frame; keeps re-evaluating if GIS re-renders it.
+  const googleBtn = gisFrame
+    .locator('div[role="button"]')
+    .filter({ hasText: /continue with google/i });
+
+  console.log('Clicking "Continue with Google" (inside GIS iframe)…');
+
+  const [googlePage] = await Promise.all([
+    page.waitForEvent('popup'), // capture the FedCM popup
+    googleBtn.click(), // trigger the click
+  ]);
+
+  console.log('Google popup captured');
+
+  console.log('Prompting user for credentials');
+  const [username, password] = await session.prompt({
+    title: 'Google Email or Phone',
+    description: 'Enter your Google credentials to login',
+    icon: 'google.com',
+    prompts: [
+      {
+        label: 'Email or phone',
+        type: 'text',
+        attributes: {
+          min_length: 3,
+          max_length: 3,
+          placeholder: 'Email or phone',
+        },
+        error: usernameError,
+      },
+      {
+        label: 'Password',
+        type: 'password',
+        attributes: { placeholder: 'Password' },
+        error: passwordError,
+      },
+    ],
+  });
+
+  console.log('Filling Email');
+  await googlePage.waitForLoadState('domcontentloaded');
+  await googlePage
+    .getByRole('textbox', { name: 'Email or phone' })
+    .fill(username, { timeout: 5000 });
+  console.log('Email filled');
+  await googlePage.getByText('Next').click();
+  // After the email step Google may either:
+  //  • navigate straight to the password page, OR
+  //  • show an extra screen with a "Try another way" button.
+  //
+  // We race those two possibilities.
+
+  // Helper: waits *up to* 4 s for the optional "Try another way" screen.
+  const handleOptionalTryAnother = async (_page) => {
+    const tryAnotherBtn = _page.getByRole('button', {
+      name: /try another way/i,
+    });
+
+    const appeared = await tryAnotherBtn
+      .waitFor({ state: 'visible', timeout: 4000 })
+      .then(() => true)
+      .catch(() => false); // → timed-out, button never showed
+
+    if (!appeared) {
+      console.log('No optional screen — continuing normally');
+      return;
+    }
+
+    console.log('Optional "Try another way" screen detected → clicking');
+    await Promise.all([
+      _page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+      tryAnotherBtn.click(),
+    ]);
+    console.log('"Try another way" handled');
+  };
+
+  // Race: either we arrive at the password URL, or we detect & handle the
+  // optional screen.  Whichever finishes first unblocks the flow.
+  await Promise.race([
+    googlePage.waitForURL(/\/signin\/v2\/sl\/pwd/, { timeout: 20000 }),
+    handleOptionalTryAnother(googlePage),
+  ]);
+
+  // ── Optional "Choose how you'll sign in" screen ──────────────────────────
+  const handleOptionalEnterPassword = async (_page) => {
+    const enterPwdBtn = _page.getByRole('link', {
+      name: /enter your password/i,
+    });
+
+    const appeared = await enterPwdBtn
+      .waitFor({ state: 'visible', timeout: 4000 })
+      .then(() => true)
+      .catch(() => false); // timed out → screen never appeared
+
+    if (!appeared) {
+      console.log('No "Enter your password" screen—continuing');
+      return;
+    }
+
+    console.log('Optional screen detected → clicking "Enter your password"');
+    await Promise.all([
+      _page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+      enterPwdBtn.click(),
+    ]);
+    console.log('"Enter your password" clicked, navigated to password page');
+  };
+
+  // Give that screen up to 4 s to show.  If we're *already* on the
+  // password page nothing happens because the button isn't present.
+
+  await Promise.race([
+    googlePage.waitForURL(/\/signin\/v2\/sl\/pwd/, { timeout: 20000 }),
+    await handleOptionalEnterPassword(googlePage),
+  ]);
+
+  const pwdBox = googlePage.getByRole('textbox', {
+    name: 'Enter your password',
+  });
+  await pwdBox.waitFor({ state: 'visible' });
+  await pwdBox.fill(password, { timeout: 5000 });
+  console.log('Password filled');
+  await googlePage.getByText('Next').click();
+
+  const navOrClose = Promise.race([
+    googlePage.waitForEvent('close').then(() => 'closed'),
+    googlePage
+      .waitForNavigation({ waitUntil: 'networkidle' })
+      .then(() => 'navigated'),
+  ]);
+
+  const result = await navOrClose;
+  if (result === 'closed') {
+    console.log('Google popup closed – login finished without 2-FA');
+    return;
+  }
+
+  await googlePage.waitForTimeout(2000);
+
+  const tryAnother = googlePage.getByRole('button', {
+    name: 'Try another way',
+  });
+  if ((await tryAnother.elementHandles()).length) {
+    console.log("Clicking 'Try another way'");
+    await tryAnother.click();
+    await googlePage.waitForTimeout(3000);
+  } else {
+    console.log("'Try another way' not present - continuing");
+  }
+
+  const has2FA = !!(
+    await googlePage.getByText('2-Step Verification').elementHandles()
+  ).length;
+
+  if (has2FA) {
+    console.log('Detected 2-Step Verification');
+
+    const hasOptionalScreen = googlePage.getByText(
+      'fingerprint, face, or screen lock'
+    );
+    if (!!(await hasOptionalScreen.elementHandles()).length) {
+      console.log('Detected extra 2fa screen, continuing');
+      await googlePage.getByRole('button', { name: 'Try another way' }).click();
+      await googlePage.waitForTimeout(1000);
+    }
+
+    const tabletOption = {
+      label: 'Tap Yes on your phone or tablet',
+      locator: googlePage.getByRole('link', {
+        name: ' on your phone or tablet',
+      }),
+      followup: async (_page, _code) => {},
+      prompt: async () => ({
+        title: 'Confirm Access',
+        description: 'Confirm you allowed access in your Google App',
+        prompts: [
+          {
+            label: 'Confirm to continue',
+            type: 'checkbox',
+            attributes: { required: true, options: ['Confirm'] },
+          },
+        ],
+      }),
+    };
+    const authenticator = {
+      label: 'Get a verification code from the Google Authenticator app',
+      locator: googlePage.getByRole('link', {
+        name: 'Get a verification code from',
+      }),
+      followup: async (_page, _code) => {
+        await _page.getByRole('textbox', { name: 'Enter code' }).fill(_code);
+        await _page.getByText('Next').click();
+      },
+      prompt: () => ({
+        title: 'Enter one time code',
+        description: 'Enter the one time code sent to your phone',
+        prompts: [
+          {
+            label: 'Code',
+            type: 'text',
+            attributes: {},
+          },
+        ],
+      }),
+    };
+    const smsCode = {
+      label: 'Get a verification code sent to your phone',
+      locator: googlePage.getByRole('link', {
+        name: 'Get a verification code at',
+      }),
+      followup: async (_page, _code) => {
+        await _page
+          .getByRole('textbox', { name: 'Enter the code' })
+          .fill(_code);
+        await _page.getByText('Next').click();
+      },
+      prompt: () => ({
+        title: 'Enter one time code',
+        description: 'Enter the one time code sent to your phone',
+        prompts: [
+          {
+            label: 'Code',
+            type: 'text',
+            attributes: {},
+          },
+        ],
+      }),
+    };
+
+    const allOptions = [tabletOption, authenticator, smsCode];
+    const checkPromises = allOptions.map(async (option) => {
+      try {
+        if (!(await option.locator.elementHandles()).length) {
+          console.warn(\`Option '\${option.label}' locator not visible.\`);
+          return null;
+        }
+
+        const isEnabled = !(await option.locator.isDisabled());
+        if (!isEnabled) {
+          console.warn(
+            \`Found disabled option: \${await option.locator.innerText()}\`
+          );
+        } else {
+          console.log(
+            \`Found enabled option \${await option.locator.innerText()}\`
+          );
+        }
+
+        return isEnabled ? option : null;
+      } catch (error) {
+        console.error(\`Error checking option '\${option.label}':\`, error);
+        return null;
+      }
+    });
+
+    const checkedOptions = await Promise.all(checkPromises);
+    const enabledOptions = checkedOptions.filter((o) => !!o);
+    if (enabledOptions.length > 0) {
+      if (enabledOptions.length > 1) {
+        console.log(
+          \`Prompting user with enabled 2-Factor options.\${(
+            await Promise.all(
+              enabledOptions.map(
+                async (e, i) => \`\${i + 1}) \${await e.locator.innerText()}\`
+              )
+            )
+          ).join('\\n')}\`
+        );
+
+        const [choice] = await session.prompt({
+          title: 'Two Factor Authentication',
+          description: "Choose how you'd like to 2FA",
+          prompts: [
+            {
+              label: 'Two Factor Method',
+              type: 'checkbox',
+              attributes: {
+                multiple: false,
+                options: enabledOptions.map((o) => o.label),
+              },
+            },
+          ],
+        });
+
+        console.log('Selecting 2FA method');
+        const match = enabledOptions.findIndex((i) => i.label === choice[0]);
+        await enabledOptions[match].locator.click();
+        console.log('Prompting user for 2FA');
+        const [code] = await session.prompt(
+          await enabledOptions[match].prompt()
+        );
+
+        if (enabledOptions[match].followup) {
+          console.log('Entering 2FA Code');
+          await enabledOptions[match].followup(googlePage, code);
+          console.log('2FA code entered');
+        }
+      } else {
+        console.log(
+          \`Found a single enabled option: \${await enabledOptions[0].locator.innerText()}\`
+        );
+
+        await enabledOptions[0].locator.click();
+        console.log('Prompting user for 2FA');
+        const [code] = await session.prompt(await enabledOptions[0].prompt());
+        if (enabledOptions[0].followup) {
+          console.log('Entering 2FA Code');
+          await enabledOptions[0].followup(googlePage, code);
+          console.log('2FA code entered');
+        }
+      }
+    } else {
+      console.log('No enabled options found.');
+    }
+  }
+};
+
+console.log(\`Navigating to \${LOGIN_URL}\`);
+await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded' });
+console.log(\`\${LOGIN_URL} loaded\`);
+
+await handleSecurityDetection();
+
+switch (choice.id) {
+  case 'google':
+    console.log('Authing Google');
+    await authGoogle(undefined, undefined);
+    await page.waitForLoadState('domcontentloaded');
+    await handleSecurityDetection();
+    break;
+  case 'credentials':
+    console.log('Email →', choice.email);
+    console.log('Password →', choice.password);
+    await authUsernamePass(choice.email, choice.password);
+    break;
+}
+
+/**
+ * Navigate to User Profile
+ */
+console.log('User Logged In');
+await page.waitForLoadState('domcontentloaded');
+console.log('Navigating to User Profile');
+const userMenuBtn = page.getByRole('button', { name: /expand user menu$/i });
+await userMenuBtn.waitFor({ state: 'visible', timeout: 30000 });
+await userMenuBtn.click();
+await page.getByText('View Profile').click();
+
+/**
+ * Scrape Username
+ */
+await page.waitForLoadState('domcontentloaded');
+
+console.log('User Profile Loaded');
+console.log('Scraping Username');
+const handle = await page
+  .getByLabel('Profile information')
+  .getByRole('heading', {
+    name: /^(?!\\s*(?:Settings|Social\\s+Links|Trophy\\s+Case)\\s*$).+/i,
+  })
+  .innerText();
+console.log('Username Scraped');
+
+const [postKarma, commentKarma] = await page
+  .getByTestId('karma-number')
+  .allInnerTexts();
+
+/**
+ * Generate proof and cleanup
+ */
+console.log(\`Generating proof of username \${handle}\`);
+await session.prove('reddit-data', [
+  { redditUsername: handle },
+  {
+    totalKarma: (
+      Number.parseInt(postKarma.replace(',', ''), 10) +
+      Number.parseInt(commentKarma.replace(',', ''), 10)
+    ).toLocaleString('en-US'),
+  },
+  { postKarma },
+  { commentKarma },
+]);
+console.log('Proof generated');
+
+console.log('Performing cleanup');
+await page.close();
+await browser.close();
+await session.close();`;
+
+    // Template button event listeners
+    const plutoButton = document.getElementById('plutoTemplate');
+    const reclaimButton = document.getElementById('reclaimTemplate');
+    const primusButton = document.getElementById('primusTemplate');
+    const zkp2pButton = document.getElementById('zkp2pTemplate');
+    const opacityButton = document.getElementById('opacityTemplate');
+    
+
+    // Function to enable/disable generate button based on template content
+    const updateGenerateButton = () => {
+        if (templateInput && generateTemplateButton) {
+            generateTemplateButton.disabled = !templateInput.value.trim();
+        }
+    };
+
+    // Pluto button functionality
+    if (plutoButton && templateInput && templateDescription) {
+        plutoButton.addEventListener('click', () => {
+            templateInput.value = plutoTemplate;
+            templateDescription.innerHTML = 'See this example on verifying Reddit Karma at <a href="https://playground.pluto.xyz/" target="_blank" style="color: #3498db;">https://playground.pluto.xyz/</a>';
+            updateGenerateButton();
+        });
+    }
+
+    // Placeholder functionality for other template buttons
+    if (reclaimButton) {
+        reclaimButton.addEventListener('click', () => {
+            templateInput.value = `Data source URL
+https://www.github.com
+Request URL
+https://www.github.com/graphql
+Data items  
+(jsonPath)
+username
+$.data.user.login`;
+            templateDescription.innerHTML = 'See this example on verifying XHS at <a href="https://dev.reclaimprotocol.org/explore" target="_blank" style="color: #3498db;">https://dev.reclaimprotocol.org/explore</a>';
+            updateGenerateButton();
+        });
+    }
+
+    if (opacityButton) {
+        opacityButton.addEventListener('click', () => {
+            templateInput.value = `Data source URL
+https://www.github.com
+Request URL
+https://www.github.com/graphql
+Data items  
+(jsonPath)
+username
+$.data.user.login`;
+            templateDescription.innerHTML = 'See this example on verifying XHS at <a href="https://app.opacity.network/dashboard" target="_blank" style="color: #3498db;">https://app.opacity.network/dashboard</a>';
+            updateGenerateButton();
+        });
+    }
+
+    if (primusButton) {
+        primusButton.addEventListener('click', () => {
+            templateInput.value = `Data source URL
+https://www.xiaohongshu.com/explore
+Request URL
+https://edith.xiaohongshu.com/api/sns/web/v2/user/me
+Data items  
+(jsonPath)
+red_id
+$.data.red_id`;
+            templateDescription.innerHTML = 'See this example on verifying XHS at <a href="https://dev.primuslabs.xyz/" target="_blank" style="color: #3498db;">https://dev.primuslabs.xyz/</a>';
+            updateGenerateButton();
+        });
+    }
+
+    if (zkp2pButton) {
+        zkp2pButton.addEventListener('click', () => {
+            templateInput.value = `{
+  "actionType": "transfer_venmo",
+  "authLink": "https://account.venmo.com/?feed=mine",
+  "url": "https://account.venmo.com/api/stories?feedType=me&externalId={{SENDER_ID}}",
+  "method": "GET",
+  "body": "",
+  "metadata": {
+    "platform": "venmo",
+    "urlRegex": "https://account.venmo.com/api/stories\\\\?feedType=me&externalId=\\\\S+",
+    "method": "GET",
+    "fallbackUrlRegex": "",
+    "fallbackMethod": "",
+    "preprocessRegex": "",
+    "transactionsExtraction": {
+      "transactionJsonPathListSelector": "$.stories",
+      "transactionJsonPathSelectors": {
+        "recipient": "$.title.receiver.username",
+        "amount": "$.amount",
+        "date": "$.date",
+        "paymentId": "$.paymentId",
+        "currency": "$.currency"
+      }
+    },
+    "proofMetadataSelectors": [
+      {
+        "type": "jsonPath",
+        "value": "$.stories[{{INDEX}}].amount"
+      },
+      {
+        "type": "jsonPath",
+        "value": "$.stories[{{INDEX}}].paymentId"
+      },
+      {
+        "type": "jsonPath",
+        "value": "$.stories[{{INDEX}}].title.receiver.username"
+      }
+    ]
+  },
+  "paramNames": [
+    "SENDER_ID"
+  ],
+  "paramSelectors": [
+    {
+      "type": "jsonPath",
+      "value": "$.stories[{{INDEX}}].title.sender.id"
+    }
+  ],
+  "skipRequestHeaders": [],
+  "secretHeaders": [
+    "Cookie"
+  ],
+  "responseMatches": [
+    {
+      "type": "regex",
+      "value": "\\"amount\\":\\"- \\\\$(?<amount>[^\\"]+)\\""
+    },
+    {
+      "type": "regex",
+      "value": "\\"date\\":\\"(?<date>[^\\"]+)\\""
+    },
+    {
+      "type": "regex",
+      "value": "\\"paymentId\\":\\"(?<paymentId>[^\\"]+)\\""
+    },
+    {
+      "type": "regex",
+      "value": "\\"id\\":\\"(?<receiverId>[^\\"]+)\\"",
+      "hash": true
+    },
+    {
+      "type": "regex",
+      "value": "\\"subType\\":\\"none\\""
+    }
+  ],
+  "responseRedactions": [
+    {
+      "jsonPath": "$.stories[{{INDEX}}].amount",
+      "xPath": ""
+    },
+    {
+      "jsonPath": "$.stories[{{INDEX}}].date",
+      "xPath": ""
+    },
+    {
+      "jsonPath": "$.stories[{{INDEX}}].paymentId",
+      "xPath": ""
+    },
+    {
+      "jsonPath": "$.stories[{{INDEX}}].title.receiver.id",
+      "xPath": ""
+    },
+    {
+      "jsonPath": "$.stories[{{INDEX}}].subType",
+      "xPath": ""
+    }
+  ],
+  "mobile": {
+    "includeAdditionalCookieDomains": [],
+    "actionLink": "venmo://paycharge?txn=pay&recipients={{RECEIVER_ID}}&note=cash&amount={{AMOUNT}}",
+    "isExternalLink": true,
+    "appStoreLink": "https://apps.apple.com/us/app/venmo/id351727428",
+    "playStoreLink": "https://play.google.com/store/apps/details?id=com.venmo"
+  }
+}`;
+            templateDescription.innerHTML = 'See this example on verifying Venmo at <a href="https://github.com/zkp2p/providers" target="_blank" style="color: #3498db;">https://github.com/zkp2p/providers</a>';
+            updateGenerateButton();
+        });
+    }
+
+    // Update generate button when template input changes
+    if (templateInput) {
+        templateInput.addEventListener('input', updateGenerateButton);
+        updateGenerateButton(); // Initial check
+    }
+
+    // Generate from Template button functionality
+    if (generateTemplateButton) {
+        console.log('✅ Adding event listener to generateTemplate button');
+        generateTemplateButton.addEventListener('click', async () => {
+            console.log('🤖 Generate from Template button clicked!');
+            const templateContent = templateInput.value.trim();
+            const currentQuery = aiQueryInput.value.trim();
+            console.log('Template content:', templateContent.substring(0, 100) + '...');
+            console.log('Current AI query:', currentQuery);
+            
+            if (!templateContent) {
+                alert('Please select a template first.');
+                return;
+            }
+
+            // Check if we have captured network data
+            const hasNetworkData = resultsDiv.innerHTML.includes('network request') || resultsDiv.innerHTML.includes('Request');
+            console.log('Has network data:', hasNetworkData);
+
+            try {
+                // Check if API key is available for AI-powered template generation
+                const apiKey = apiKeyInput.value.trim();
+                
+                if (templateContent.includes('import') && templateContent.includes('createSession') && apiKey && hasNetworkData && currentQuery) {
+                    // Smart Playwright template generation using AI
+                    console.log('🧠 Generating intelligent Playwright template with AI');
+                    
+                    // Get the current results text for context
+                    const networkDataText = resultsDiv.textContent || '';
+                    
+                    // Create AI prompt for template generation
+                    const templatePrompt = `You are a code generator. Based on this user query: "${currentQuery}"
+
+And this captured network data from their browsing session:
+${networkDataText.substring(0, 5000)}
+
+Modify this Playwright template to extract the data the user is looking for:
+${templateContent}
+
+Requirements:
+1. Keep the same basic structure and authentication flow
+2. Modify the data extraction part to get: ${currentQuery}
+3. Update variable names and extraction logic to match the query
+4. Update the final session.prove() call to include the relevant data
+5. Keep the same imports and general flow
+6. Make sure the code extracts data relevant to: ${currentQuery}
+
+Return only the modified Playwright script, no explanations.`;
+
+                    // Show processing status
+                    const statusMessage = createStatusMessage('info', '🧠 AI is generating custom template based on your query and captured data...');
+                    const templateOutput = document.getElementById('templateOutput');
+                    if (templateOutput) {
+                        templateOutput.textContent = 'Generating intelligent template...';
+                    }
+                    
+                    try {
+                        // Make AI request to generate custom template
+                        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: [{ parts: [{ text: templatePrompt }] }],
+                                generationConfig: {
+                                    temperature: 0.3,
+                                    maxOutputTokens: 4000
+                                }
+                            })
+                        });
+
+                        const data = await response.json();
+                        
+                        if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
+                            const generatedTemplate = data.candidates[0].content.parts[0].text
+                                .replace(/```javascript/g, '')
+                                .replace(/```js/g, '')
+                                .replace(/```/g, '')
+                                .trim();
+                            
+                            // Display the generated template
+                            if (templateOutput) {
+                                templateOutput.textContent = generatedTemplate;
+                            }
+                            
+                            // Show success message
+                            resultsDiv.innerHTML = '';
+                            const successMessage = createStatusMessage('success', `✅ Smart template generated! AI adapted the Playwright script for: "${currentQuery}"`);
+                            resultsDiv.appendChild(successMessage);
+                            
+                            console.log('✅ Generated custom template successfully');
+                        } else {
+                            throw new Error('Invalid AI response');
+                        }
+                        
+                    } catch (aiError) {
+                        console.error('AI template generation error:', aiError);
+                        // Fall back to basic template parsing
+                        basicTemplateHandling();
+                    }
+                    
+                } else {
+                    // Basic template handling for non-AI cases
+                    basicTemplateHandling();
+                }
+                
+                // Basic template handling function
+                function basicTemplateHandling() {
+                    if (templateContent.startsWith('{')) {
+                        // JSON format (like zkp2p template)
+                        console.log('Parsing as JSON template');
+                        const template = JSON.parse(templateContent);
+                        if (template.url) {
+                            urlInput.value = template.url;
+                            aiQueryInput.focus();
+                            aiQueryInput.value = 'Analyze this API endpoint for data extraction patterns';
+                        }
+                    } else if (templateContent.includes('import') && templateContent.includes('createSession')) {
+                        // Playwright script format (like Pluto template)
+                        console.log('Parsing as Playwright script template');
+                        
+                        const urlMatches = templateContent.match(/https?:\/\/[^\s'"]+/g);
+                        if (urlMatches && urlMatches.length > 0) {
+                            const loginUrl = urlMatches.find(url => url.includes('login')) || urlMatches[0];
+                            urlInput.value = loginUrl;
+                            console.log('Extracted URL from Playwright script:', loginUrl);
+                            
+                            aiQueryInput.focus();
+                            aiQueryInput.value = 'Extract user profile data and account information';
+                        } else {
+                            urlInput.value = 'https://www.reddit.com';
+                            aiQueryInput.focus();
+                            aiQueryInput.value = 'Extract my Reddit karma and username';
+                        }
+                    } else {
+                        // Simple format (like Primus/Reclaim template)
+                        console.log('Parsing as simple template');
+                        const lines = templateContent.split('\n');
+                        let requestUrl = '';
+                        
+                        for (let i = 0; i < lines.length; i++) {
+                            const line = lines[i].trim();
+                            if (line === 'Request URL' && i + 1 < lines.length) {
+                                requestUrl = lines[i + 1].trim();
+                                break;
+                            }
+                        }
+                        
+                        console.log('Extracted Request URL:', requestUrl);
+                        
+                        if (requestUrl) {
+                            urlInput.value = requestUrl;
+                            aiQueryInput.focus();
+                            aiQueryInput.value = 'Analyze this API endpoint for data extraction patterns';
+                        }
+                    }
+                    
+                    // Update highlights and show basic success message
+                    checkWebsiteUrlHighlight();
+                    const statusMessage = createStatusMessage('success', '✅ Template processed! URL has been set.');
+                    resultsDiv.innerHTML = '';
+                    resultsDiv.appendChild(statusMessage);
+                }
+                
+            } catch (error) {
+                console.error('Error processing template:', error);
+                alert('Error processing template. Please check the template format.');
+            }
+        });
+    } else {
+        console.log('❌ generateTemplate button not found!');
+    }
+
+    // Auto-process template buttons (the ones above "Analyze Requests" button)
+    // These should automatically trigger the full analysis process
+    const autoProcessTemplateButtons = () => {
+        // Find all template buttons in the first section (above Analyze Requests)
+        const topPlutoButton = document.querySelector('#search').parentElement.querySelector('#plutoTemplate');
+        const topReclaimButton = document.querySelector('#search').parentElement.querySelector('#reclaimTemplate');
+        const topPrimusButton = document.querySelector('#search').parentElement.querySelector('#primusTemplate');
+        const topZkp2pButton = document.querySelector('#search').parentElement.querySelector('#zkp2pTemplate');
+        const topOpacityButton = document.querySelector('#search').parentElement.querySelector('#opacityTemplate');
+
+        console.log('Auto-process template buttons found:', {
+            topPlutoButton: !!topPlutoButton,
+            topReclaimButton: !!topReclaimButton,
+            topPrimusButton: !!topPrimusButton,
+            topZkp2pButton: !!topZkp2pButton,
+            topOpacityButton: !!topOpacityButton
+        });
+
+        // Auto-process function that runs the full analysis
+        const runAutoProcess = async (templateType, templateData, queryText, targetUrl) => {
+            console.log(`🚀 Auto-processing ${templateType} template`);
+            
+            // Set the form values
+            urlInput.value = targetUrl;
+            aiQueryInput.value = queryText;
+            
+            // Update highlights
+            checkWebsiteUrlHighlight();
+            checkApiKeyHighlight();
+            
+            // Check if API key is available
+            const apiKey = apiKeyInput.value.trim();
+            if (!apiKey) {
+                highlightApiKeyError(true);
+                expandApiKeySection();
+                alert('Please enter your Gemini API key first.');
+                return;
+            }
+            
+            // Show status message
+            const statusMessage = createStatusMessage('info', `🤖 Auto-processing ${templateType} template...`);
+            resultsDiv.innerHTML = '';
+            resultsDiv.appendChild(statusMessage);
+            
+            // Store the template type for later use
+            window.currentAutoProcessTemplate = templateType;
+            
+            // Trigger the analysis
+            setTimeout(() => {
+                searchButton.click();
+            }, 1000);
+        };
+
+        // Add event listeners for auto-process buttons
+        if (topReclaimButton) {
+            topReclaimButton.addEventListener('click', () => {
+                runAutoProcess('Reclaim', 'github', 'Extract my GitHub username', 'https://www.github.com/graphql');
+            });
+        }
+
+        if (topPrimusButton) {
+            topPrimusButton.addEventListener('click', () => {
+                runAutoProcess('Primus', 'xiaohongshu', 'Extract my XHS red_id', 'https://edith.xiaohongshu.com/api/sns/web/v2/user/me');
+            });
+        }
+
+        if (topZkp2pButton) {
+            topZkp2pButton.addEventListener('click', () => {
+                runAutoProcess('zkP2P', 'venmo', 'Extract Venmo transaction data', 'https://account.venmo.com/api/stories');
+            });
+        }
+
+        if (topPlutoButton) {
+            topPlutoButton.addEventListener('click', () => {
+                // Use the current AI query instead of hard-coded Reddit analysis
+                const currentQuery = aiQueryInput.value.trim() || 'Extract user data';
+                runAutoProcess('Pluto', 'dynamic', currentQuery, '');
+            });
+        }
+
+        if (topOpacityButton) {
+            topOpacityButton.addEventListener('click', () => {
+                runAutoProcess('Opacity', 'generic', 'Extract user data', 'https://example.com');
+            });
+        }
+    };
+
+    // Initialize auto-process buttons
+    autoProcessTemplateButtons();
+
+    // Auto-generate template function
+    const autoGenerateTemplate = async (templateType, networkData, query) => {
+        console.log(`🤖 Auto-generating ${templateType} template with captured data`);
+        
+        const apiKey = apiKeyInput.value.trim();
+        if (!apiKey) {
+            console.log('❌ No API key available for auto-template generation');
+            return;
+        }
+        
+        // Get the appropriate template based on type
+        let baseTemplate = '';
+        switch (templateType) {
+            case 'Pluto':
+                baseTemplate = plutoTemplate;
+                break;
+            case 'Reclaim':
+                baseTemplate = `Data source URL
+https://www.github.com
+Request URL
+https://www.github.com/graphql
+Data items  
+(jsonPath)
+username
+$.data.user.login`;
+                break;
+            case 'Primus':
+                baseTemplate = `Data source URL
+https://www.xiaohongshu.com/explore
+Request URL
+https://edith.xiaohongshu.com/api/sns/web/v2/user/me
+Data items  
+(jsonPath)
+red_id
+$.data.red_id`;
+                break;
+            case 'zkP2P':
+                baseTemplate = `{
+  "actionType": "transfer_venmo",
+  "authLink": "https://account.venmo.com/?feed=mine",
+  "url": "https://account.venmo.com/api/stories?feedType=me&externalId={{SENDER_ID}}",
+  "method": "GET"
+}`;
+                break;
+            default:
+                console.log('❌ Unknown template type:', templateType);
+                return;
+        }
+        
+        // Show status in the template output area
+        const templateOutput = document.getElementById('templateOutput');
+        if (templateOutput) {
+            templateOutput.textContent = `🤖 Auto-generating ${templateType} template for: "${query}"\n\nAnalyzing captured network data and adapting template...`;
+        }
+        
+        // Prepare network data as text
+        const networkDataText = JSON.stringify(networkData, null, 2);
+        
+        // Create AI prompt for auto-template generation
+        const autoTemplatePrompt = `You are a code generator. Based on this user query: "${query}"
+
+And this captured network data from their browsing session:
+${networkDataText.substring(0, 8000)}
+
+Adapt this ${templateType} template to extract the data the user is looking for:
+${baseTemplate}
+
+Requirements:
+1. Keep the same basic structure and format as the original template
+2. Modify the data extraction to match the user's query: "${query}"
+3. Use the captured network data to find the most relevant API endpoints
+4. Update URLs, paths, and extraction logic to match what was actually captured
+5. For Playwright scripts: Keep authentication flow but change data extraction
+6. For JSON templates: Update URLs and jsonPath selectors based on captured data
+7. For simple templates: Update Request URLs and data extraction paths
+
+Return only the modified template code, no explanations.`;
+
+        try {
+            // Make AI request to generate auto-template
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: autoTemplatePrompt }] }],
+                    generationConfig: {
+                        temperature: 0.3,
+                        maxOutputTokens: 4000
+                    }
+                })
+            });
+
+            const data = await response.json();
+            
+            if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
+                const generatedTemplate = data.candidates[0].content.parts[0].text
+                    .replace(/```javascript/g, '')
+                    .replace(/```js/g, '')
+                    .replace(/```json/g, '')
+                    .replace(/```/g, '')
+                    .trim();
+                
+                // Display the generated template
+                if (templateOutput) {
+                    templateOutput.textContent = generatedTemplate;
+                }
+                
+                // Show success message in main results area
+                const autoSuccessDiv = document.createElement('div');
+                autoSuccessDiv.style.cssText = 'background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 15px; border-radius: 6px; margin-top: 15px;';
+                autoSuccessDiv.innerHTML = `✅ <strong>Auto-Template Generated!</strong><br>AI created a custom ${templateType} template for: "${escapeHTML(query)}"<br><small>Check the "Generated Output" section below for the code.</small>`;
+                resultsDiv.appendChild(autoSuccessDiv);
+                
+                console.log('✅ Auto-generated template successfully');
+            } else {
+                throw new Error('Invalid AI response for auto-template generation');
+            }
+            
+        } catch (error) {
+            console.error('Auto-template generation error:', error);
+            if (templateOutput) {
+                templateOutput.textContent = `❌ Auto-template generation failed: ${error.message}\n\nPlease try the manual "🤖 Generate from Template" button instead.`;
+            }
+        }
+    };
 
 }); 
