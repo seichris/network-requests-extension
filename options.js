@@ -1581,6 +1581,7 @@ await session.close();`;
     const primusButton = document.getElementById('primusTemplate');
     const zkp2pButton = document.getElementById('zkp2pTemplate');
     const opacityButton = document.getElementById('opacityTemplate');
+    const zkPassButton = document.getElementById('zkPassTemplate');
     
 
     // Function to enable/disable generate button based on template content
@@ -1752,6 +1753,47 @@ $.data.red_id`;
   }
 }`;
             templateDescription.innerHTML = 'See this example on verifying Venmo at <a href="https://github.com/zkp2p/providers" target="_blank" style="color: #3498db;">https://github.com/zkp2p/providers</a>';
+            updateGenerateButton();
+        });
+    }
+
+    if (zkPassButton) {
+        zkPassButton.addEventListener('click', () => {
+            templateInput.value = `{
+  "issuer": "Quora",
+  "desc": "The platform to ask questions and connect with people who contribute unique insights and quality answers.",
+  "website": "https://www.quora.com/stats",
+  "APIs": [
+    {
+      "host": "www.quora.com",
+      "intercept": {
+        "url": "graphql/gql_para_POST",
+        "method": "POST",
+        "query": [
+          {
+            "q": "UserStatsContentQuery",
+            "verify": true
+          }
+        ]
+      },
+      "assert": [
+        {
+          "key": "data|viewer|__typename",
+          "value": "Viewer",
+          "operation": "="
+        }
+      ],
+      "nullifier": "data|viewer|uid"
+    }
+  ],
+  "HRCondition": [
+    "Quora Account Owner"
+  ],
+  "tips": {
+    "message": "When you successfully log in, please click the 'Start' button to initiate the verification process."
+  }
+}`;
+            templateDescription.innerHTML = 'See zkPass custom schema documentation at <a href="https://docs.zkpass.org/developer-guides/js-sdk/schema/custom-schema" target="_blank" style="color: #3498db;">https://docs.zkpass.org/developer-guides/js-sdk/schema/custom-schema</a>';
             updateGenerateButton();
         });
     }
@@ -1943,13 +1985,15 @@ Return only the modified Playwright script, no explanations.`;
         const topPrimusButton = document.querySelector('#search').parentElement.querySelector('#primusTemplate');
         const topZkp2pButton = document.querySelector('#search').parentElement.querySelector('#zkp2pTemplate');
         const topOpacityButton = document.querySelector('#search').parentElement.querySelector('#opacityTemplate');
+        const topZkPassButton = document.querySelector('#search').parentElement.querySelector('#zkPassTemplate');
 
         console.log('Auto-process template buttons found:', {
             topPlutoButton: !!topPlutoButton,
             topReclaimButton: !!topReclaimButton,
             topPrimusButton: !!topPrimusButton,
             topZkp2pButton: !!topZkp2pButton,
-            topOpacityButton: !!topOpacityButton
+            topOpacityButton: !!topOpacityButton,
+            topZkPassButton: !!topZkPassButton
         });
 
         // Auto-process function that runs the full analysis
@@ -2017,6 +2061,12 @@ Return only the modified Playwright script, no explanations.`;
         if (topOpacityButton) {
             topOpacityButton.addEventListener('click', () => {
                 runAutoProcess('Opacity', 'generic', 'Extract user data', 'https://example.com');
+            });
+        }
+
+        if (topZkPassButton) {
+            topZkPassButton.addEventListener('click', () => {
+                runAutoProcess('zkPass', 'generic', 'Quora account owner', 'https://www.quora.com/stats');
             });
         }
     };
