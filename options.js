@@ -1582,6 +1582,7 @@ await session.close();`;
     const zkp2pButton = document.getElementById('zkp2pTemplate');
     const opacityButton = document.getElementById('opacityTemplate');
     const zkPassButton = document.getElementById('zkPassTemplate');
+    const vouchButton = document.getElementById('vouchTemplate');
     
 
     // Function to enable/disable generate button based on template content
@@ -1798,6 +1799,34 @@ $.data.red_id`;
         });
     }
 
+    if (vouchButton) {
+        vouchButton.addEventListener('click', () => {
+            templateInput.value = `{
+  "website": "https://x.com",
+  "requestUrl": "https://api.x.com/1.1/account/settings.json",
+  "method": "GET",
+  "jsonPath": "$.screen_name",
+  "description": "X.com account ownership verification",
+  "headers": {
+    "Authorization": "Bearer {{ACCESS_TOKEN}}",
+    "Content-Type": "application/json"
+  },
+  "expectedFields": [
+    "screen_name",
+    "id",
+    "name"
+  ],
+  "verification": {
+    "type": "account_ownership",
+    "platform": "x.com",
+    "identifier": "screen_name"
+  }
+}`;
+            templateDescription.innerHTML = 'Vouch template for X.com account verification. Update the website, requestUrl, and jsonPath fields as needed for different platforms.';
+            updateGenerateButton();
+        });
+    }
+
     // Update generate button when template input changes
     if (templateInput) {
         templateInput.addEventListener('input', updateGenerateButton);
@@ -1986,6 +2015,7 @@ Return only the modified Playwright script, no explanations.`;
         const topZkp2pButton = document.querySelector('#search').parentElement.querySelector('#zkp2pTemplate');
         const topOpacityButton = document.querySelector('#search').parentElement.querySelector('#opacityTemplate');
         const topZkPassButton = document.querySelector('#search').parentElement.querySelector('#zkPassTemplate');
+        const topVouchButton = document.querySelector('#search').parentElement.querySelector('#vouchTemplate');
 
         console.log('Auto-process template buttons found:', {
             topPlutoButton: !!topPlutoButton,
@@ -1993,7 +2023,8 @@ Return only the modified Playwright script, no explanations.`;
             topPrimusButton: !!topPrimusButton,
             topZkp2pButton: !!topZkp2pButton,
             topOpacityButton: !!topOpacityButton,
-            topZkPassButton: !!topZkPassButton
+            topZkPassButton: !!topZkPassButton,
+            topVouchButton: !!topVouchButton
         });
 
         // Auto-process function that runs the full analysis
@@ -2067,6 +2098,12 @@ Return only the modified Playwright script, no explanations.`;
         if (topZkPassButton) {
             topZkPassButton.addEventListener('click', () => {
                 runAutoProcess('zkPass', 'generic', 'Quora account owner', 'https://www.quora.com/stats');
+            });
+        }
+
+        if (topVouchButton) {
+            topVouchButton.addEventListener('click', () => {
+                runAutoProcess('Vouch', 'generic', 'X.com account ownership', 'https://api.x.com/1.1/account/settings.json');
             });
         }
     };
